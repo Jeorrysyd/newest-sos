@@ -1,11 +1,13 @@
 import { useState } from "react";
 import EntryPhase from "@/components/phases/EntryPhase";
+import TransitionPhase from "@/components/phases/TransitionPhase";
+import ComfortPhase from "@/components/phases/ComfortPhase";
 import StabilizePhase from "@/components/phases/StabilizePhase";
-import OrientPhase from "@/components/phases/OrientPhase";
-import ConnectPhase from "@/components/phases/ConnectPhase";
+import CognitivePhase from "@/components/phases/CognitivePhase";
 import ExitPhase from "@/components/phases/ExitPhase";
-import PhaseIndicator, { type Phase } from "@/components/PhaseIndicator";
 import { cn } from "@/lib/utils";
+
+type Phase = "entry" | "transition" | "comfort" | "stabilize" | "cognitive" | "exit";
 
 const Index = () => {
   const [currentPhase, setCurrentPhase] = useState<Phase>("entry");
@@ -16,7 +18,7 @@ const Index = () => {
     setTimeout(() => {
       setCurrentPhase(phase);
       setIsTransitioning(false);
-    }, 600);
+    }, 300);
   };
 
   const handleRestart = () => {
@@ -24,39 +26,32 @@ const Index = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden">
-      {/* Ambient background effect */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/3 w-[400px] h-[400px] bg-glow-secondary/5 rounded-full blur-3xl" />
-      </div>
-
-      {/* Phase indicator */}
-      <div className="fixed top-8 left-0 right-0 z-50 flex justify-center">
-        <PhaseIndicator currentPhase={currentPhase} />
-      </div>
-
+    <div className="relative min-h-screen overflow-hidden">
       {/* Phase content */}
       <div
         className={cn(
-          "transition-all duration-600 ease-out",
-          isTransitioning && "opacity-0 scale-95"
+          "transition-opacity duration-300 ease-out",
+          isTransitioning && "opacity-0"
         )}
       >
         {currentPhase === "entry" && (
-          <EntryPhase onEnter={() => transitionTo("stabilize")} />
+          <EntryPhase onEnter={() => setCurrentPhase("transition")} />
+        )}
+        
+        {currentPhase === "transition" && (
+          <TransitionPhase onComplete={() => transitionTo("comfort")} />
+        )}
+        
+        {currentPhase === "comfort" && (
+          <ComfortPhase onComplete={() => transitionTo("stabilize")} />
         )}
         
         {currentPhase === "stabilize" && (
-          <StabilizePhase onComplete={() => transitionTo("orient")} />
+          <StabilizePhase onComplete={() => transitionTo("cognitive")} />
         )}
         
-        {currentPhase === "orient" && (
-          <OrientPhase onComplete={() => transitionTo("connect")} />
-        )}
-        
-        {currentPhase === "connect" && (
-          <ConnectPhase onComplete={() => transitionTo("exit")} />
+        {currentPhase === "cognitive" && (
+          <CognitivePhase onComplete={() => transitionTo("exit")} />
         )}
         
         {currentPhase === "exit" && (

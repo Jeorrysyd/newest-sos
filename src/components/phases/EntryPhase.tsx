@@ -11,32 +11,28 @@ const EntryPhase = ({ onEnter, className }: EntryPhaseProps) => {
     <div
       className={cn(
         "flex flex-col items-center justify-center min-h-screen px-6",
+        "bg-background-light",
         "animate-fade-in-up",
         className
       )}
     >
-      {/* Subtle background gradient */}
-      <div className="absolute inset-0 bg-gradient-radial from-muted/20 via-transparent to-transparent" />
-
-      {/* Question text */}
-      <div className="relative z-10 text-center mb-12 space-y-3">
-        <p className="text-lg text-muted-foreground font-light">您是否此刻</p>
-        <h1 className="text-2xl font-normal tracking-wide">
-          正在感受到痛苦？
+      {/* Title */}
+      <div className="text-center mb-6 space-y-2">
+        <h1 className="text-3xl font-medium text-foreground-light leading-tight">
+          您是否此刻
+        </h1>
+        <h1 className="text-3xl font-medium text-foreground-light leading-tight">
+          正在遭受到创伤？
         </h1>
       </div>
 
-      {/* SOS Button */}
-      <div className="relative z-10">
-        <SOSButton onClick={onEnter} />
-      </div>
-
-      {/* Helper text */}
-      <p className="relative z-10 mt-12 text-sm text-muted-foreground/60 text-center max-w-xs">
-        点击上方按钮，进入稳定流程
-        <br />
-        <span className="text-xs">无需解释，无需判断</span>
+      {/* Subtitle */}
+      <p className="text-foreground-light/60 text-base mb-16">
+        按下按钮 寻求帮助
       </p>
+
+      {/* SOS Button */}
+      <SOSButton onClick={onEnter} />
     </div>
   );
 };
