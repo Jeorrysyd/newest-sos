@@ -1,5 +1,5 @@
-import BreathingRing from "@/components/BreathingRing";
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 interface ExitPhaseProps {
   onRestart: () => void;
@@ -11,61 +11,72 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
     <div
       className={cn(
         "flex flex-col items-center justify-center min-h-screen px-6",
+        "bg-background-light",
         "animate-fade-in-up",
         className
       )}
     >
-      {/* Phase title */}
-      <div className="absolute top-20 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">
-          Exit
-        </p>
-        <h2 className="text-lg font-light text-foreground/80">结束</h2>
-      </div>
+      {/* Large light blue circle with shadow/glow effect */}
+      <div className="relative flex items-center justify-center mb-12">
+        {/* Outer glow/shadow */}
+        <div 
+          className="absolute w-96 h-96 rounded-full"
+          style={{
+            background: `radial-gradient(circle at 50% 50%,
+              hsl(190 30% 85% / 0.8) 0%,
+              hsl(190 25% 80% / 0.4) 50%,
+              transparent 70%
+            )`,
+          }}
+        />
 
-      {/* Completion message */}
-      <BreathingRing size="lg" intensity="soft">
-        <div className="text-center max-w-xs">
-          <p className="text-2xl font-light mb-4 glow-text">稳定</p>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            你已经完成了稳定流程
+        {/* Main circle */}
+        <motion.div
+          className="relative w-72 h-72 rounded-full flex flex-col items-center justify-center"
+          style={{
+            background: `linear-gradient(180deg,
+              hsl(195 40% 92%) 0%,
+              hsl(190 35% 88%) 100%
+            )`,
+            boxShadow: `
+              0 0 60px hsl(190 40% 80% / 0.5),
+              inset 0 0 40px hsl(190 30% 95% / 0.5)
+            `,
+          }}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          {/* Content inside circle */}
+          <h2 className="text-foreground-light text-2xl font-medium mb-6">
+            现在
+          </h2>
+          <p className="text-foreground-light/80 text-center text-base leading-relaxed px-6">
+            试着找一找，
             <br />
-            现在可以继续你的事情
+            现在的房间里有几种颜色？
           </p>
-        </div>
-      </BreathingRing>
-
-      {/* Affirmation */}
-      <div className="absolute bottom-48 text-center max-w-xs">
-        <p className="text-foreground/70 font-light leading-relaxed">
-          记住：
-          <br />
-          <span className="text-primary/80">
-            你刚才的感受是正常的反应
-          </span>
-        </p>
+        </motion.div>
       </div>
 
-      {/* Return button */}
-      <button
+      {/* Exit button */}
+      <motion.button
         onClick={onRestart}
         className={cn(
-          "absolute bottom-24 px-8 py-3 rounded-full",
-          "bg-primary text-primary-foreground",
-          "font-light tracking-wide",
-          "transition-all duration-500",
+          "px-12 py-3.5 rounded-lg",
+          "bg-success text-success-foreground",
+          "text-lg font-medium",
+          "transition-all duration-300",
           "hover:opacity-90",
-          "focus:outline-none focus:ring-2 focus:ring-primary/50",
+          "focus:outline-none focus:ring-2 focus:ring-success/50",
           "active:scale-95"
         )}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
       >
-        返回
-      </button>
-
-      {/* Note */}
-      <p className="absolute bottom-10 text-xs text-muted-foreground/40 text-center">
-        如需要进一步帮助，请联系专业人士
-      </p>
+        离开
+      </motion.button>
     </div>
   );
 };
