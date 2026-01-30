@@ -12,7 +12,6 @@ const EntryPhase = ({ onEnter, className }: EntryPhaseProps) => {
       className={cn(
         "flex flex-col items-center justify-center min-h-screen px-6",
         "bg-background-light",
-        "animate-fade-in-up",
         className
       )}
     >
