@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
+import SoftOrb from "@/components/SoftOrb";
 
 interface ComfortPhaseProps {
   onComplete: () => void;
@@ -9,15 +11,16 @@ interface ComfortPhaseProps {
 
 const comfortMessages = [
   {
-    text: "你现在的反应，\n是被突然的压力吓到了。",
+    text: "你受到了惊吓，\n这不是你的错。",
   },
   {
-    text: "这是正常的身体\n应激反应",
+    text: "你的身体在保护你，\n一切都会好的。",
   },
 ];
 
 const ComfortPhase = ({ onComplete, className }: ComfortPhaseProps) => {
   const [currentMessage, setCurrentMessage] = useState(0);
+  const text = phaseText(2);
 
   useEffect(() => {
     const timer1 = setTimeout(() => {
@@ -38,64 +41,50 @@ const ComfortPhase = ({ onComplete, className }: ComfortPhaseProps) => {
     <div
       className={cn(
         "flex flex-col items-center justify-center min-h-screen",
-        "bg-background",
         className
       )}
+      style={{ background: phaseGradient(2) }}
     >
-      {/* Wave pattern background */}
-      <div className="absolute inset-0 wave-pattern wave-pattern-animated opacity-60" />
-
-      {/* Glowing circle container */}
-      <div className="relative flex items-center justify-center">
-        {/* Outer glow */}
-        <div 
-          className="absolute w-80 h-80 rounded-full"
-          style={{
-            background: `radial-gradient(circle at 50% 50%,
-              hsl(180 20% 30% / 0.6) 0%,
-              hsl(180 15% 20% / 0.3) 50%,
-              transparent 70%
-            )`,
-          }}
-        />
-
-        {/* Main circle with glow border */}
-        <motion.div
-          className="relative w-64 h-64 rounded-full flex items-center justify-center"
-          style={{
-            background: `radial-gradient(circle at 50% 50%,
-              hsl(180 15% 18%) 0%,
-              hsl(180 12% 14%) 100%
-            )`,
-            boxShadow: `
-              0 0 80px hsl(180 30% 40% / 0.25),
-              inset 0 0 60px hsl(180 20% 10% / 0.5)
-            `,
-            border: '1px solid hsl(180 40% 50% / 0.2)',
-          }}
-          animate={{
-            scale: [1, 1.02, 1],
-          }}
-          transition={{
-            duration: 4,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        >
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={currentMessage}
-              className="text-foreground/80 text-lg font-light text-center leading-relaxed whitespace-pre-line px-8"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.6 }}
-            >
-              {comfortMessages[currentMessage].text}
-            </motion.p>
-          </AnimatePresence>
-        </motion.div>
+      {/* Floating particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full animate-float"
+            style={{
+              width: 3 + i * 2,
+              height: 3 + i * 2,
+              left: `${10 + i * 18}%`,
+              top: `${25 + (i % 3) * 20}%`,
+              background: `rgba(160, 196, 200, ${0.1 + i * 0.02})`,
+              filter: 'blur(1px)',
+              animationDelay: `${i * 1.2}s`,
+              animationDuration: `${6 + i}s`,
+            }}
+          />
+        ))}
       </div>
+
+      {/* SoftOrb with message */}
+      <SoftOrb size="lg">
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={currentMessage}
+            className="text-lg text-center leading-relaxed whitespace-pre-line px-8"
+            style={{
+              color: text.soft,
+              fontFamily: twilight.font.family,
+              fontWeight: twilight.font.weight,
+            }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.6 }}
+          >
+            {comfortMessages[currentMessage].text}
+          </motion.p>
+        </AnimatePresence>
+      </SoftOrb>
     </div>
   );
 };

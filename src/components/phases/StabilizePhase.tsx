@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
 
 interface StabilizePhaseProps {
   onComplete: () => void;
@@ -20,6 +21,7 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
   const [cycles, setCycles] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const totalCycles = 3;
+  const text = phaseText(3);
 
   const currentStep = breathingSteps[currentStepIndex];
 
@@ -27,18 +29,18 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
     if (!isActive) return;
 
     const nextIndex = (currentStepIndex + 1) % breathingSteps.length;
-    
+
     if (nextIndex === 0) {
       const newCycles = cycles + 1;
       setCycles(newCycles);
-      
+
       if (newCycles >= totalCycles) {
         setIsActive(false);
         setTimeout(onComplete, 1000);
         return;
       }
     }
-    
+
     setCurrentStepIndex(nextIndex);
   }, [currentStepIndex, cycles, isActive, onComplete]);
 
@@ -49,7 +51,6 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
     return () => clearTimeout(timer);
   }, [currentStepIndex, isActive, advanceStep, currentStep.duration]);
 
-  // Calculate circle scale based on breathing step
   const getCircleScale = () => {
     switch (currentStep.step) {
       case "inhale": return 1.2;
@@ -63,57 +64,86 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
     <div
       className={cn(
         "flex flex-col items-center justify-center min-h-screen",
-        "bg-background",
         className
       )}
+      style={{ background: phaseGradient(3) }}
     >
-      {/* Wave pattern background */}
-      <div className="absolute inset-0 wave-pattern wave-pattern-animated opacity-60" />
+      {/* Floating particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full animate-float"
+            style={{
+              width: 4 + i * 2,
+              height: 4 + i * 2,
+              left: `${20 + i * 18}%`,
+              top: `${30 + (i % 2) * 30}%`,
+              background: `rgba(160, 196, 200, ${0.1 + i * 0.03})`,
+              filter: 'blur(1px)',
+              animationDelay: `${i * 1.5}s`,
+              animationDuration: `${5 + i * 1.5}s`,
+            }}
+          />
+        ))}
+      </div>
 
-      {/* Breathing step indicators at top */}
+      {/* Breathing step indicators */}
       <div className="absolute top-24 flex items-center gap-8">
         {breathingSteps.map((step, index) => (
           <span
             key={step.step}
             className={cn(
-              "text-lg font-light transition-all duration-500",
+              "text-lg transition-all duration-500",
               currentStepIndex === index
-                ? "text-primary glow-text scale-110"
-                : "text-foreground/30"
+                ? "scale-110 glow-text"
+                : ""
             )}
+            style={{
+              color: currentStepIndex === index
+                ? twilight.accent
+                : text.muted,
+              fontFamily: twilight.font.family,
+              fontWeight: twilight.font.weight,
+            }}
           >
             {step.label}
           </span>
         ))}
       </div>
 
-      {/* Breathing circle */}
+      {/* Breathing circle — SoftOrb style */}
       <div className="relative flex items-center justify-center">
-        {/* Outer glow */}
-        <div 
-          className="absolute w-96 h-96 rounded-full"
+        {/* Outer warm glow */}
+        <div
+          className="absolute rounded-full"
           style={{
+            width: 384,
+            height: 384,
             background: `radial-gradient(circle at 50% 50%,
-              hsl(180 20% 25% / 0.5) 0%,
-              hsl(180 15% 15% / 0.2) 50%,
+              rgba(122, 184, 184, 0.2) 0%,
+              rgba(58, 88, 104, 0.1) 50%,
               transparent 70%
             )`,
+            filter: 'blur(20px)',
           }}
         />
 
-        {/* Main breathing circle */}
+        {/* Main breathing orb */}
         <motion.div
           className="relative w-72 h-72 rounded-full flex items-center justify-center"
           style={{
-            background: `radial-gradient(circle at 50% 50%,
-              hsl(180 15% 20%) 0%,
-              hsl(180 12% 15%) 100%
+            background: `radial-gradient(circle at 40% 35%,
+              rgba(122, 184, 184, 0.15) 0%,
+              rgba(106, 144, 152, 0.12) 40%,
+              rgba(26, 48, 64, 0.2) 100%
             )`,
             boxShadow: `
-              0 0 100px hsl(180 35% 45% / 0.3),
-              inset 0 0 80px hsl(180 20% 10% / 0.6)
+              0 0 80px rgba(122, 184, 184, 0.15),
+              0 0 160px rgba(122, 184, 184, 0.05),
+              inset 0 0 60px rgba(122, 184, 184, 0.04)
             `,
-            border: '1px solid hsl(180 45% 55% / 0.25)',
+            border: '1px solid rgba(122, 184, 184, 0.1)',
           }}
           animate={{
             scale: getCircleScale(),
@@ -125,43 +155,48 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
         />
       </div>
 
-      {/* Progress indicator at bottom */}
+      {/* Progress indicator */}
       <div className="absolute bottom-32 flex items-center gap-4">
         {Array.from({ length: totalCycles }).map((_, i) => (
           <div key={i} className="flex items-center gap-1">
-            <div
-              className={cn(
-                "relative flex items-center justify-center",
-                "transition-all duration-500"
-              )}
-            >
+            <div className="relative flex items-center justify-center transition-all duration-500">
               {i < cycles ? (
-                // Completed cycle - checkmark
-                <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary flex items-center justify-center">
-                  <svg 
-                    className="w-3 h-3 text-primary" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{
+                    background: `rgba(122, 184, 184, 0.15)`,
+                    border: `1px solid ${twilight.accent}`,
+                  }}
+                >
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke={twilight.accent}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
               ) : i === cycles ? (
-                // Current cycle - progress bar
-                <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="w-16 h-1 rounded-full overflow-hidden"
+                  style={{ background: 'rgba(255, 255, 255, 0.15)' }}
+                >
                   <motion.div
-                    className="h-full bg-primary"
+                    className="h-full rounded-full"
+                    style={{ background: twilight.accent }}
                     initial={{ width: "0%" }}
-                    animate={{ 
-                      width: `${((currentStepIndex + 1) / breathingSteps.length) * 100}%` 
+                    animate={{
+                      width: `${((currentStepIndex + 1) / breathingSteps.length) * 100}%`
                     }}
                     transition={{ duration: 0.3 }}
                   />
                 </div>
               ) : (
-                // Future cycle - empty bar
-                <div className="w-16 h-1 bg-muted rounded-full" />
+                <div
+                  className="w-16 h-1 rounded-full"
+                  style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                />
               )}
             </div>
           </div>

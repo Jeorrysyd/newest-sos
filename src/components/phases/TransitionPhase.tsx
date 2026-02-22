@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
+import SoftOrb from "@/components/SoftOrb";
 
 interface TransitionPhaseProps {
   onComplete: () => void;
@@ -8,23 +10,24 @@ interface TransitionPhaseProps {
 }
 
 const TransitionPhase = ({ onComplete, className }: TransitionPhaseProps) => {
-  const [stage, setStage] = useState<"expand" | "ellipse" | "message">("expand");
+  const [stage, setStage] = useState<"dissolve" | "glow" | "message">("dissolve");
+  const text = phaseText(1);
 
   useEffect(() => {
-    // Stage 1: Button expansion animation (1.5s)
+    // Stage 1: Button dissolves into glow (2s)
     const timer1 = setTimeout(() => {
-      setStage("ellipse");
-    }, 1500);
+      setStage("glow");
+    }, 2000);
 
-    // Stage 2: Show message (after 2s)
+    // Stage 2: Show message inside orb (3.5s)
     const timer2 = setTimeout(() => {
       setStage("message");
-    }, 2500);
+    }, 3500);
 
-    // Complete transition (after 5s)
+    // Complete transition (6s)
     const timer3 = setTimeout(() => {
       onComplete();
-    }, 5000);
+    }, 6000);
 
     return () => {
       clearTimeout(timer1);
@@ -37,100 +40,108 @@ const TransitionPhase = ({ onComplete, className }: TransitionPhaseProps) => {
     <div
       className={cn(
         "flex flex-col items-center justify-center min-h-screen",
-        "transition-colors duration-1000",
-        stage === "expand" ? "bg-background-light" : "bg-background-light",
         className
       )}
+      style={{ background: phaseGradient(1) }}
     >
       <AnimatePresence mode="wait">
-        {stage === "expand" && (
+        {stage === "dissolve" && (
           <motion.div
-            key="expand"
+            key="dissolve"
             className="relative flex items-center justify-center"
-            initial={{ scale: 1 }}
-            animate={{ scale: 1.2 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
           >
-            {/* Expanding rings */}
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full bg-destructive"
-                initial={{ scale: 0.8, opacity: 0.8 }}
-                animate={{ scale: 2 + i * 0.5, opacity: 0 }}
-                transition={{
-                  duration: 1.5,
-                  delay: i * 0.2,
-                  ease: "easeOut",
-                }}
+            {/* Button dissolving into soft glow */}
+            <motion.div
+              className="w-48 h-48 rounded-full flex items-center justify-center"
+              style={{
+                background: `radial-gradient(circle at 40% 35%, ${twilight.palette.coral}, ${twilight.palette.plum})`,
+              }}
+              animate={{
+                scale: [1, 1.1, 1.3],
+                opacity: [1, 0.7, 0],
+                filter: ['blur(0px)', 'blur(8px)', 'blur(30px)'],
+              }}
+              transition={{
+                duration: 2,
+                ease: "easeInOut",
+              }}
+            >
+              <motion.span
+                className="text-2xl"
                 style={{
-                  width: 192,
-                  height: 192,
+                  color: text.primary,
+                  fontFamily: twilight.font.family,
+                  fontWeight: 300,
                 }}
-              />
-            ))}
-            
-            {/* Center button */}
-            <div className="w-48 h-48 rounded-full bg-destructive flex items-center justify-center">
-              <span className="text-white text-2xl font-medium">紧急求助</span>
-            </div>
+                animate={{ opacity: [1, 0] }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+              >
+                我需要帮助
+              </motion.span>
+            </motion.div>
+
+            {/* Expanding warm glow that fills screen */}
+            <motion.div
+              className="absolute rounded-full"
+              style={{
+                background: `radial-gradient(circle, ${twilight.palette.softCoral}40, ${twilight.palette.plum}20, transparent)`,
+              }}
+              initial={{ width: 192, height: 192, opacity: 0 }}
+              animate={{
+                width: [192, 600, 1200],
+                height: [192, 600, 1200],
+                opacity: [0, 0.6, 0],
+              }}
+              transition={{
+                duration: 2,
+                ease: "easeInOut",
+              }}
+            />
           </motion.div>
         )}
 
-        {(stage === "ellipse" || stage === "message") && (
+        {(stage === "glow" || stage === "message") && (
           <motion.div
-            key="ellipse"
+            key="orb"
             className="relative flex items-center justify-center w-full h-screen"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
           >
-            {/* Elliptical gradient backdrop */}
-            <div 
+            {/* Soft ambient backdrop */}
+            <div
               className="absolute inset-0"
               style={{
-                background: `radial-gradient(ellipse 70% 90% at 50% 50%, 
-                  hsl(200 20% 45% / 0.95) 0%,
-                  hsl(200 18% 35% / 0.8) 30%,
-                  hsl(200 15% 25% / 0.5) 60%,
+                background: `radial-gradient(ellipse 70% 90% at 50% 50%,
+                  rgba(107, 48, 96, 0.5) 0%,
+                  rgba(58, 24, 96, 0.3) 40%,
                   transparent 100%
                 )`,
               }}
             />
 
-            {/* Inner glowing circle */}
-            <motion.div
-              className="relative w-64 h-64 rounded-full flex items-center justify-center"
-              style={{
-                background: `radial-gradient(circle at 50% 50%,
-                  hsl(180 25% 50% / 0.3) 0%,
-                  hsl(180 20% 45% / 0.4) 50%,
-                  hsl(180 15% 40% / 0.5) 100%
-                )`,
-                boxShadow: `
-                  0 0 60px hsl(180 30% 50% / 0.3),
-                  inset 0 0 40px hsl(180 40% 60% / 0.2)
-                `,
-                border: '1px solid hsl(180 40% 60% / 0.3)',
-              }}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            >
+            {/* SoftOrb with message */}
+            <SoftOrb size="lg">
               <AnimatePresence>
                 {stage === "message" && (
                   <motion.p
-                    className="text-white text-xl font-light tracking-wide"
-                    initial={{ opacity: 0, y: 10 }}
+                    className="text-xl tracking-wide"
+                    style={{
+                      color: text.primary,
+                      fontFamily: twilight.font.family,
+                      fontWeight: twilight.font.weight,
+                    }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
                   >
                     我接住你了
                   </motion.p>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </SoftOrb>
           </motion.div>
         )}
       </AnimatePresence>

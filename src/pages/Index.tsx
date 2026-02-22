@@ -1,36 +1,37 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import EntryPhase from "@/components/phases/EntryPhase";
-import TransitionPhase from "@/components/phases/TransitionPhase";
 import ComfortPhase from "@/components/phases/ComfortPhase";
 import StabilizePhase from "@/components/phases/StabilizePhase";
 import CognitivePhase from "@/components/phases/CognitivePhase";
 import ExitPhase from "@/components/phases/ExitPhase";
+import HaloEffect from "@/components/HaloEffect";
+import PhoneFrame from "@/components/PhoneFrame";
+import { AudioProvider, MuteButton } from "@/components/AudioManager";
 
-type Phase = "entry" | "transition" | "comfort" | "stabilize" | "cognitive" | "exit";
+type Phase = "entry" | "comfort" | "stabilize" | "cognitive" | "exit";
 
 const Index = () => {
   const [currentPhase, setCurrentPhase] = useState<Phase>("entry");
 
   const transitionTo = (phase: Phase) => setCurrentPhase(phase);
 
-  const handleRestart = () => {
-    transitionTo("entry");
-  };
+  const handleRestart = () => transitionTo("entry");
 
-  const phaseTransition = useMemo(
+  // Simple opacity-only transition — no blur, no scale, no window-switching feel
+  const pageVariants = useMemo(
     () => ({
-      duration: 0.65,
-      ease: [0.22, 1, 0.36, 1] as const,
+      initial: { opacity: 0 },
+      animate: { opacity: 1 },
+      exit: { opacity: 0 },
     }),
     []
   );
 
-  const pageVariants = useMemo(
+  const phaseTransition = useMemo(
     () => ({
-      initial: { opacity: 0, scale: 0.985, filter: "blur(6px)" },
-      animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-      exit: { opacity: 0, scale: 1.015, filter: "blur(6px)" },
+      duration: 0.8,
+      ease: [0.4, 0, 0.2, 1] as const,
     }),
     []
   );
@@ -38,9 +39,7 @@ const Index = () => {
   const renderPhase = (phase: Phase) => {
     switch (phase) {
       case "entry":
-        return <EntryPhase onEnter={() => transitionTo("transition")} />;
-      case "transition":
-        return <TransitionPhase onComplete={() => transitionTo("comfort")} />;
+        return <EntryPhase onEnter={() => transitionTo("comfort")} />;
       case "comfort":
         return <ComfortPhase onComplete={() => transitionTo("stabilize")} />;
       case "stabilize":
@@ -54,8 +53,10 @@ const Index = () => {
     }
   };
 
-  return (
+  const content = (
     <div className="relative min-h-screen overflow-hidden">
+      <HaloEffect />
+      <MuteButton />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={currentPhase}
@@ -64,12 +65,18 @@ const Index = () => {
           animate="animate"
           exit="exit"
           transition={phaseTransition}
-          style={{ willChange: "opacity, transform, filter" }}
+          style={{ willChange: "opacity" }}
         >
           {renderPhase(currentPhase)}
         </motion.div>
       </AnimatePresence>
     </div>
+  );
+
+  return (
+    <AudioProvider>
+      <PhoneFrame>{content}</PhoneFrame>
+    </AudioProvider>
   );
 };
 
