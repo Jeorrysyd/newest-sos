@@ -30,9 +30,15 @@ export const twilight = {
   // Accent / emphasis color
   accent: '#7ab8b8',
 
-  // Orb config — 静海 (Still Sea)
+  // Orb config — 静海 (Still Sea) with aurora multicolor
   orb: {
     blur: 30,
+    // Multicolor aurora tones (紫 / 粉 / 蓝)
+    colorPurple: 'rgba(180, 130, 220, 0.35)',
+    colorPink:   'rgba(230, 150, 180, 0.28)',
+    colorBlue:   'rgba(100, 180, 220, 0.30)',
+    glowMulti:   'rgba(180, 130, 220, 0.15)',
+    // Original teal (kept for breathing ring center)
     innerColor: 'rgba(122, 184, 184, 0.25)',
     outerColor: 'rgba(106, 144, 152, 0.12)',
     glowColor: 'rgba(160, 196, 200, 0.18)',

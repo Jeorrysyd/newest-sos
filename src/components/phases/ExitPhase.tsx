@@ -5,47 +5,59 @@ import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
 
 interface ExitPhaseProps {
   onRestart: () => void;
+
   className?: string;
 }
 
-type ExitStage = "ground" | "butterfly" | "affirm" | "farewell";
+type ExitStage = "intro" | "butterfly_prep" | "butterfly" | "affirm" | "farewell";
 
 const affirmations = [
-  "我很安全",
-  "我是被爱的",
-  "我已经做得很好了",
+  { text: "我很安全" },
+  { text: "我是被爱的" },
+  { text: "我已经做得很好了" },
 ];
 
 const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
-  const [stage, setStage] = useState<ExitStage>("ground");
+  const [stage, setStage] = useState<ExitStage>("intro");
   const [affirmIndex, setAffirmIndex] = useState(0);
   const text = phaseText(5);
 
+  // intro → butterfly_prep (4s)
   useEffect(() => {
-    if (stage === "ground") {
-      const t = setTimeout(() => setStage("butterfly"), 5000);
-      return () => clearTimeout(t);
-    }
-    if (stage === "butterfly") {
-      const t = setTimeout(() => setStage("affirm"), 8000);
-      return () => clearTimeout(t);
-    }
-    if (stage === "affirm") {
-      // Cycle through affirmations
-      if (affirmIndex < affirmations.length - 1) {
-        const t = setTimeout(() => setAffirmIndex(prev => prev + 1), 3000);
-        return () => clearTimeout(t);
-      } else {
-        const t = setTimeout(() => setStage("farewell"), 3000);
-        return () => clearTimeout(t);
-      }
-    }
+    if (stage !== "intro") return;
+    const timer = setTimeout(() => setStage("butterfly_prep"), 4000);
+    return () => clearTimeout(timer);
+  }, [stage]);
+
+  // butterfly_prep → butterfly (5s)
+  useEffect(() => {
+    if (stage !== "butterfly_prep") return;
+    const timer = setTimeout(() => setStage("butterfly"), 5000);
+    return () => clearTimeout(timer);
+  }, [stage]);
+
+  // butterfly → affirm (6s)
+  useEffect(() => {
+    if (stage !== "butterfly") return;
+    const timer = setTimeout(() => setStage("affirm"), 6000);
+    return () => clearTimeout(timer);
+  }, [stage]);
+
+  // affirm — show each affirmation for 3s, then next or farewell
+  useEffect(() => {
+    if (stage !== "affirm") return;
+    const isLast = affirmIndex === affirmations.length - 1;
+    const timer = setTimeout(
+      isLast ? () => setStage("farewell") : () => setAffirmIndex(prev => prev + 1),
+      3000
+    );
+    return () => clearTimeout(timer);
   }, [stage, affirmIndex]);
 
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center min-h-screen px-6",
+        "flex flex-col items-center justify-center min-h-[100dvh] px-6",
         className
       )}
       style={{ background: phaseGradient(5) }}
@@ -84,15 +96,8 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
           )`,
           filter: 'blur(40px)',
         }}
-        animate={{
-          scale: [1, 1.06, 1],
-          opacity: [0.8, 1, 0.8],
-        }}
-        transition={{
-          duration: twilight.rhythm.cycleDuration,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
+        animate={{ scale: [1, 1.06, 1], opacity: [0.8, 1, 0.8] }}
+        transition={{ duration: twilight.rhythm.cycleDuration, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         className="absolute rounded-full"
@@ -107,48 +112,36 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
           filter: 'blur(25px)',
         }}
         animate={{ scale: [1, 1.03, 1] }}
-        transition={{
-          duration: twilight.rhythm.cycleDuration,
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: 0.5,
-        }}
+        transition={{ duration: twilight.rhythm.cycleDuration, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
       />
 
       {/* Content area */}
       <div className="relative z-10 flex flex-col items-center justify-center">
         <AnimatePresence mode="wait">
-          {/* Stage 1: Grounding question */}
-          {stage === "ground" && (
-            <motion.div
-              key="ground"
-              className="flex flex-col items-center text-center"
-              initial={{ opacity: 0, y: 10 }}
+
+          {/* Stage 0: Bridge intro */}
+          {stage === "intro" && (
+            <motion.p
+              key="intro"
+              className="text-xl text-center leading-relaxed"
+              style={{ color: text.soft, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.8 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
             >
-              <h2
-                className="text-2xl mb-6"
-                style={{ color: text.primary, fontFamily: twilight.font.family, fontWeight: 300 }}
-              >
-                现在
-              </h2>
-              <p
-                className="text-base leading-relaxed"
-                style={{ color: text.soft, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
-              >
-                试着找一找，
-                <br />
-                现在的房间里有几种颜色？
-              </p>
-            </motion.div>
+              很好
+              <br />
+              你刚才照顾了自己的身体
+              <br />
+              现在，让心也跟上来
+            </motion.p>
           )}
 
-          {/* Stage 2: Butterfly Hug guidance */}
-          {stage === "butterfly" && (
+          {/* Stage 1: Butterfly prep — get into position */}
+          {stage === "butterfly_prep" && (
             <motion.div
-              key="butterfly"
+              key="butterfly_prep"
               className="flex flex-col items-center text-center"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -162,19 +155,35 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
                 蝴蝶拍
               </h2>
               <p
+                className="text-base leading-loose"
+                style={{ color: text.soft, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
+              >
+                把双臂交叉放在胸前
+                <br />
+                左手放在右肩，右手放在左肩
+              </p>
+            </motion.div>
+          )}
+
+          {/* Stage 2: Butterfly — in motion */}
+          {stage === "butterfly" && (
+            <motion.div
+              key="butterfly"
+              className="flex flex-col items-center text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.8 }}
+            >
+              <p
                 className="text-base leading-loose mb-6"
                 style={{ color: text.soft, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
               >
-                双臂交叉放在胸前
-                <br />
-                左手放在右肩，右手放在左肩
-                <br />
                 像蝴蝶振翅一样
                 <br />
                 轻轻交替拍打肩膀
               </p>
 
-              {/* Butterfly animation hint */}
               <motion.div
                 className="flex gap-1 mt-2"
                 animate={{ scale: [1, 1.05, 1] }}
@@ -199,25 +208,27 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
             </motion.div>
           )}
 
-          {/* Stage 3: Affirmations */}
+          {/* Stage 3: Affirmations — say-along */}
           {stage === "affirm" && (
             <motion.div
               key={`affirm-${affirmIndex}`}
-              className="flex flex-col items-center text-center"
+              className="flex flex-col items-center text-center gap-5"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
               transition={{ duration: 0.8 }}
             >
               <p
-                className="text-2xl leading-relaxed"
-                style={{
-                  color: text.primary,
-                  fontFamily: twilight.font.family,
-                  fontWeight: 300,
-                }}
+                className="text-sm tracking-widest"
+                style={{ color: text.muted, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
               >
-                {affirmations[affirmIndex]}
+                轻声跟着说
+              </p>
+              <p
+                className="text-2xl leading-relaxed"
+                style={{ color: text.primary, fontFamily: twilight.font.family, fontWeight: 300 }}
+              >
+                {affirmations[affirmIndex].text}
               </p>
             </motion.div>
           )}

@@ -55,8 +55,8 @@ const HaloEffect = () => {
         height: 160,
         borderRadius: '50%',
         background: `radial-gradient(circle at 50% 50%,
-          ${twilight.accent}25 0%,
-          ${twilight.palette.softCoral}12 40%,
+          ${twilight.orb.colorPurple} 0%,
+          ${twilight.orb.colorBlue} 40%,
           transparent 70%
         )`,
         filter: 'blur(20px)',

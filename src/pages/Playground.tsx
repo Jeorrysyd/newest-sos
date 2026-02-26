@@ -1,373 +1,426 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { twilight } from "@/lib/design-tokens";
+import { phaseGradient, twilight } from "@/lib/design-tokens";
 
-// ── Palette definitions ──────────────────────────────────────────────
+// ── Phase definitions ─────────────────────────────────────────────────
+const phases = [
+  { label: "Entry", sub: "入口 / 安慰", idx: 1 },
+  { label: "Stabilize", sub: "呼吸稳定", idx: 3 },
+  { label: "Cognitive", sub: "认知陪伴", idx: 4 },
+  { label: "Exit", sub: "离开", idx: 5 },
+];
 
-interface PaletteDef {
-  id: string;
-  name: string;
-  subtitle: string;
-  /** 6 gradient stops, one per phase (Entry → Comfort → Stabilize → Cognitive → Exit-early → Exit-late) */
-  stops: [string, string][];
-  accent: string;
-  orb: { inner: string; outer: string; glow: string };
-  /** Index at which text flips from light→dark */
-  darkTextFrom: number;
-  particle: string;
-}
+const isDark = (phaseIdx: number) => phaseIdx < 4;
 
-const palettes: PaletteDef[] = [
+// ── Effect definitions ────────────────────────────────────────────────
+type Effect = "fade" | "diffuse" | "sweep" | "bloom";
+
+const effects: { key: Effect; name: string; desc: string }[] = [
   {
-    id: "morning-mist",
-    name: "晨雾",
-    subtitle: "Morning Mist — 森林清晨的疗愈感",
-    stops: [
-      ["#0f1a16", "#162420"],
-      ["#162420", "#1e3a2e"],
-      ["#1e3a2e", "#3a6050"],
-      ["#3a6050", "#6a9a78"],
-      ["#6a9a78", "#a8cca0"],
-      ["#a8cca0", "#e8f0d8"],
-    ],
-    accent: "#8abf8a",
-    orb: {
-      inner: "rgba(138, 191, 138, 0.25)",
-      outer: "rgba(106, 154, 120, 0.12)",
-      glow: "rgba(168, 204, 160, 0.18)",
-    },
-    darkTextFrom: 4,
-    particle: "rgba(168, 204, 160, 0.12)",
+    key: "fade",
+    name: "淡化",
+    desc: "旧背景缓缓消隐，新色悄然浮现",
   },
   {
-    id: "warm-sand",
-    name: "暖沙",
-    subtitle: "Warm Sand — 大地般温暖、安稳",
-    stops: [
-      ["#1a1410", "#241c16"],
-      ["#241c16", "#3a2e22"],
-      ["#3a2e22", "#6a5040"],
-      ["#6a5040", "#a08060"],
-      ["#a08060", "#d0b898"],
-      ["#d0b898", "#f0e4d0"],
-    ],
-    accent: "#c8a070",
-    orb: {
-      inner: "rgba(200, 160, 112, 0.25)",
-      outer: "rgba(160, 128, 96, 0.12)",
-      glow: "rgba(208, 184, 152, 0.18)",
-    },
-    darkTextFrom: 4,
-    particle: "rgba(208, 184, 152, 0.12)",
+    key: "diffuse",
+    name: "弥散",
+    desc: "新色从屏幕中心向外柔和渗透，边缘模糊如雾",
   },
   {
-    id: "soft-clouds",
-    name: "柔云",
-    subtitle: "Soft Clouds — 破晓时分的柔和天空",
-    stops: [
-      ["#141418", "#1c1c28"],
-      ["#1c1c28", "#2e2a3e"],
-      ["#2e2a3e", "#5a4a68"],
-      ["#5a4a68", "#9a8098"],
-      ["#9a8098", "#c8b0b8"],
-      ["#c8b0b8", "#f0e0e0"],
-    ],
-    accent: "#c0a0b0",
-    orb: {
-      inner: "rgba(192, 160, 176, 0.25)",
-      outer: "rgba(154, 128, 152, 0.12)",
-      glow: "rgba(200, 176, 184, 0.18)",
-    },
-    darkTextFrom: 4,
-    particle: "rgba(200, 176, 184, 0.12)",
+    key: "sweep",
+    name: "流光",
+    desc: "新色以光晕形式从左至右缓缓漫过",
   },
   {
-    id: "still-sea",
-    name: "静海",
-    subtitle: "Still Sea — 平静海面的治愈蓝",
-    stops: [
-      ["#0c1418", "#122028"],
-      ["#122028", "#1a3040"],
-      ["#1a3040", "#3a5868"],
-      ["#3a5868", "#6a9098"],
-      ["#6a9098", "#a0c4c8"],
-      ["#a0c4c8", "#e0f0f0"],
-    ],
-    accent: "#7ab8b8",
-    orb: {
-      inner: "rgba(122, 184, 184, 0.25)",
-      outer: "rgba(106, 144, 152, 0.12)",
-      glow: "rgba(160, 196, 200, 0.18)",
-    },
-    darkTextFrom: 4,
-    particle: "rgba(160, 196, 200, 0.12)",
+    key: "bloom",
+    name: "晕开",
+    desc: "光晕从中心悄悄扩大，如墨入水般自然",
   },
 ];
 
-const phaseLabels = ["入口", "安慰", "呼吸", "认知", "退出前", "退出"];
+// ── Speed config ──────────────────────────────────────────────────────
+const speeds: { key: string; label: string; dur: number }[] = [
+  { key: "slow", label: "慢", dur: 3.2 },
+  { key: "normal", label: "正常", dur: 2.0 },
+  { key: "fast", label: "快", dur: 1.1 },
+];
 
-// ── Playground page ──────────────────────────────────────────────────
+// ── Easing helpers ────────────────────────────────────────────────────
+const easeInOutQuad = (t: number) =>
+  t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-const Playground = () => {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [previewPalette, setPreviewPalette] = useState<string | null>(null);
+// ── Main component ────────────────────────────────────────────────────
+export default function Playground() {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [nextIdx, setNextIdx] = useState<number | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
+  const [effect, setEffect] = useState<Effect>("diffuse");
+  const [speedKey, setSpeedKey] = useState("normal");
+  const [autoPlay, setAutoPlay] = useState(false);
 
-  const activePalette = palettes.find((p) => p.id === (previewPalette ?? selected));
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
+  const autoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dur = speeds.find((s) => s.key === speedKey)!.dur;
+  const current = phases[currentIdx];
+  const next = nextIdx !== null ? phases[nextIdx] : null;
+
+  // ── Finish transition ────────────────────────────────────────────
+  const onDone = useCallback(() => {
+    if (nextIdx === null) return;
+    setCurrentIdx(nextIdx);
+    setNextIdx(null);
+    setTransitioning(false);
+    if (overlayRef.current) {
+      overlayRef.current.style.opacity = "1";
+      overlayRef.current.style.webkitMaskImage = "";
+      overlayRef.current.style.maskImage = "";
+    }
+  }, [nextIdx]);
+
+  // ── Trigger transition ───────────────────────────────────────────
+  const goTo = useCallback(
+    (idx: number) => {
+      if (transitioning || idx === currentIdx) return;
+      setNextIdx(idx);
+      setTransitioning(true);
+    },
+    [transitioning, currentIdx]
+  );
+
+  // ── Run animation based on effect ───────────────────────────────
+  useEffect(() => {
+    if (!transitioning || nextIdx === null) return;
+    cancelAnimationFrame(rafRef.current);
+
+    const durMs = dur * 1000;
+    const start = performance.now();
+
+    if (effect === "fade") {
+      // Framer Motion handles this — nothing to do here
+      return;
+    }
+
+    const animate = (now: number) => {
+      const t = Math.min((now - start) / durMs, 1);
+
+      if (effect === "diffuse") {
+        // Soft-edge radial mask expanding from center
+        const eased = easeOutCubic(t);
+        const pct = eased * 145; // expand to 145% to cover corners
+        const feather = 20; // wide feather for soft edge
+        if (overlayRef.current) {
+          const mask = `radial-gradient(circle at 50% 50%, black ${Math.max(0, pct - feather)}%, transparent ${pct}%)`;
+          overlayRef.current.style.webkitMaskImage = mask;
+          overlayRef.current.style.maskImage = mask;
+        }
+      } else if (effect === "sweep") {
+        // Left-to-right gradient wipe with wide soft leading edge
+        const eased = easeInOutCubic(t);
+        const pct = eased * 120;
+        const feather = 25;
+        if (overlayRef.current) {
+          const mask = `linear-gradient(to right, black ${Math.max(0, pct - feather)}%, transparent ${pct}%)`;
+          overlayRef.current.style.webkitMaskImage = mask;
+          overlayRef.current.style.maskImage = mask;
+        }
+      } else if (effect === "bloom") {
+        // Soft orb that grows: starts small with high blur, ends full with no blur
+        const eased = easeInOutQuad(t);
+        const pct = eased * 145;
+        const feather = 12 + (1 - eased) * 25; // feather narrows as it grows
+        if (overlayRef.current) {
+          const mask = `radial-gradient(circle at 50% 50%, black ${Math.max(0, pct - feather)}%, transparent ${pct}%)`;
+          overlayRef.current.style.webkitMaskImage = mask;
+          overlayRef.current.style.maskImage = mask;
+        }
+      }
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      } else {
+        onDone();
+      }
+    };
+
+    // Small delay so the overlay div is mounted before we animate it
+    const timeout = setTimeout(() => {
+      rafRef.current = requestAnimationFrame(animate);
+    }, 16);
+
+    return () => {
+      clearTimeout(timeout);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [transitioning, nextIdx, effect, dur, onDone]);
+
+  // ── Auto-play ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!autoPlay) {
+      if (autoRef.current) clearTimeout(autoRef.current);
+      return;
+    }
+    if (transitioning) return;
+    const waitMs = (dur + 1.2) * 1000;
+    autoRef.current = setTimeout(() => {
+      goTo((currentIdx + 1) % phases.length);
+    }, waitMs);
+    return () => {
+      if (autoRef.current) clearTimeout(autoRef.current);
+    };
+  }, [autoPlay, currentIdx, transitioning, dur, goTo]);
+
+  // Cleanup on unmount
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(rafRef.current);
+      if (autoRef.current) clearTimeout(autoRef.current);
+    },
+    []
+  );
 
   return (
     <div
-      className="min-h-screen px-4 py-12 md:px-8"
-      style={{
-        background: "linear-gradient(180deg, #0e0e14 0%, #1a1a24 100%)",
-        fontFamily: twilight.font.family,
-        fontWeight: twilight.font.weight,
-      }}
+      className="min-h-screen flex flex-col select-none"
+      style={{ background: "#080e12", fontFamily: twilight.font.family }}
     >
-      {/* Header */}
-      <div className="max-w-3xl mx-auto mb-14 text-center">
-        <h1
-          className="text-3xl mb-3"
-          style={{ color: "rgba(255,255,255,0.9)", fontWeight: 300 }}
+      {/* ── Preview area ─────────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden flex flex-col items-center justify-center"
+        style={{
+          minHeight: "60vh",
+          background: phaseGradient(current.idx),
+        }}
+      >
+        {/* Overlay: the incoming background */}
+        {transitioning && next && (
+          <>
+            {effect === "fade" ? (
+              // Fade: Framer Motion opacity
+              <motion.div
+                className="absolute inset-0"
+                style={{ background: phaseGradient(next.idx) }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: dur,
+                  ease: [0.4, 0, 0.3, 1],
+                }}
+                onAnimationComplete={onDone}
+              />
+            ) : (
+              // Mask-driven effects (diffuse / sweep / bloom)
+              <div
+                ref={overlayRef}
+                className="absolute inset-0"
+                style={{
+                  background: phaseGradient(next.idx),
+                  WebkitMaskImage:
+                    "radial-gradient(circle at 50% 50%, black 0%, transparent 0%)",
+                  maskImage:
+                    "radial-gradient(circle at 50% 50%, black 0%, transparent 0%)",
+                }}
+              />
+            )}
+          </>
+        )}
+
+        {/* Phase label */}
+        <div className="relative z-10 text-center pointer-events-none">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={transitioning ? `n-${nextIdx}` : `c-${currentIdx}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, delay: transitioning ? dur * 0.6 : 0 }}
+            >
+              <p
+                className="text-3xl mb-2"
+                style={{
+                  color: isDark(
+                    (transitioning && next ? next : current).idx
+                  )
+                    ? "rgba(255,255,255,0.9)"
+                    : "rgba(12,32,40,0.85)",
+                  fontWeight: 300,
+                }}
+              >
+                {(transitioning && next ? next : current).label}
+              </p>
+              <p
+                className="text-sm"
+                style={{
+                  color: isDark(
+                    (transitioning && next ? next : current).idx
+                  )
+                    ? "rgba(255,255,255,0.35)"
+                    : "rgba(12,32,40,0.35)",
+                }}
+              >
+                {(transitioning && next ? next : current).sub}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* ── Controls ─────────────────────────────────────────────── */}
+      <div
+        className="flex flex-col gap-5 px-5 py-6"
+        style={{ background: "#0a1318" }}
+      >
+        {/* Effect selector */}
+        <div>
+          <p
+            className="text-xs mb-3"
+            style={{ color: "rgba(255,255,255,0.25)" }}
+          >
+            过渡方式
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {effects.map((e) => (
+              <button
+                key={e.key}
+                onClick={() => setEffect(e.key)}
+                className="text-left rounded-xl px-4 py-3 transition-all"
+                style={{
+                  background:
+                    effect === e.key
+                      ? "rgba(122,184,184,0.12)"
+                      : "rgba(255,255,255,0.04)",
+                  border:
+                    effect === e.key
+                      ? "1px solid rgba(122,184,184,0.35)"
+                      : "1px solid rgba(255,255,255,0.07)",
+                }}
+              >
+                <p
+                  className="text-base mb-0.5"
+                  style={{
+                    color:
+                      effect === e.key
+                        ? "#7ab8b8"
+                        : "rgba(255,255,255,0.65)",
+                    fontWeight: 300,
+                  }}
+                >
+                  {e.name}
+                </p>
+                <p
+                  className="text-xs leading-snug"
+                  style={{ color: "rgba(255,255,255,0.3)" }}
+                >
+                  {e.desc}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Phase swatches */}
+        <div>
+          <p
+            className="text-xs mb-3"
+            style={{ color: "rgba(255,255,255,0.25)" }}
+          >
+            点击切换阶段
+          </p>
+          <div className="flex gap-2">
+            {phases.map((ph, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                disabled={transitioning}
+                className="flex-1 rounded-lg overflow-hidden flex flex-col items-center pb-2 transition-opacity"
+                style={{
+                  background: phaseGradient(ph.idx),
+                  opacity: transitioning ? 0.45 : 1,
+                  outline:
+                    currentIdx === i
+                      ? "2px solid rgba(255,255,255,0.75)"
+                      : nextIdx === i
+                      ? "2px solid rgba(255,255,255,0.3)"
+                      : "2px solid transparent",
+                  outlineOffset: "2px",
+                }}
+              >
+                <div className="h-9 w-full" />
+                <span
+                  className="text-[9px] leading-tight text-center px-1"
+                  style={{
+                    color: isDark(ph.idx)
+                      ? "rgba(255,255,255,0.55)"
+                      : "rgba(12,32,40,0.55)",
+                  }}
+                >
+                  {ph.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Speed + autoplay */}
+        <div className="flex items-center gap-2">
+          <p
+            className="text-xs mr-1"
+            style={{ color: "rgba(255,255,255,0.25)" }}
+          >
+            速度
+          </p>
+          {speeds.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSpeedKey(s.key)}
+              className="px-3 py-1.5 rounded-full text-sm transition-all"
+              style={{
+                background:
+                  speedKey === s.key
+                    ? "rgba(122,184,184,0.18)"
+                    : "rgba(255,255,255,0.05)",
+                color:
+                  speedKey === s.key
+                    ? "#7ab8b8"
+                    : "rgba(255,255,255,0.4)",
+                border:
+                  speedKey === s.key
+                    ? "1px solid rgba(122,184,184,0.35)"
+                    : "1px solid transparent",
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <button
+            onClick={() => setAutoPlay((v) => !v)}
+            className="px-4 py-1.5 rounded-full text-sm transition-all"
+            style={{
+              background: autoPlay
+                ? "rgba(122,184,184,0.15)"
+                : "rgba(255,255,255,0.05)",
+              color: autoPlay ? "#7ab8b8" : "rgba(255,255,255,0.4)",
+              border: autoPlay
+                ? "1px solid rgba(122,184,184,0.3)"
+                : "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            {autoPlay ? "⏹ 停止" : "▶ 连播"}
+          </button>
+        </div>
+
+        <p
+          className="text-xs text-center"
+          style={{ color: "rgba(255,255,255,0.15)" }}
         >
-          配色方案
-        </h1>
-        <p className="text-base" style={{ color: "rgba(255,255,255,0.4)" }}>
-          选择一个让你感到安心的色彩
+          选择让你感觉「润无声息」的方式 · 确认后告诉我应用到主流程
         </p>
       </div>
-
-      {/* Palette cards */}
-      <div className="max-w-3xl mx-auto space-y-6">
-        {palettes.map((palette) => {
-          const isSelected = selected === palette.id;
-          return (
-            <motion.button
-              key={palette.id}
-              onClick={() => setSelected(palette.id)}
-              onMouseEnter={() => setPreviewPalette(palette.id)}
-              onMouseLeave={() => setPreviewPalette(null)}
-              className="w-full text-left rounded-2xl overflow-hidden transition-all duration-300"
-              style={{
-                background: "rgba(255,255,255,0.03)",
-                border: isSelected
-                  ? `1.5px solid ${palette.accent}`
-                  : "1.5px solid rgba(255,255,255,0.06)",
-                boxShadow: isSelected
-                  ? `0 0 30px ${palette.accent}22`
-                  : "none",
-              }}
-              whileHover={{ scale: 1.005 }}
-              whileTap={{ scale: 0.998 }}
-            >
-              {/* Gradient bar — all 6 phases */}
-              <div className="flex h-16 rounded-t-2xl overflow-hidden">
-                {palette.stops.map(([from, to], i) => (
-                  <div
-                    key={i}
-                    className="flex-1 relative flex items-end justify-center pb-1.5"
-                    style={{
-                      background: `linear-gradient(135deg, ${from} 0%, ${to} 100%)`,
-                    }}
-                  >
-                    <span
-                      className="text-[10px] leading-none"
-                      style={{
-                        color:
-                          i >= palette.darkTextFrom
-                            ? "rgba(0,0,0,0.35)"
-                            : "rgba(255,255,255,0.35)",
-                      }}
-                    >
-                      {phaseLabels[i]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Info row */}
-              <div className="flex items-center gap-4 px-5 py-4">
-                {/* Orb preview */}
-                <div className="relative flex-shrink-0 w-14 h-14 flex items-center justify-center">
-                  <div
-                    className="absolute inset-0 rounded-full"
-                    style={{
-                      background: `radial-gradient(circle, ${palette.orb.inner} 0%, ${palette.orb.outer} 60%, transparent 80%)`,
-                      filter: "blur(6px)",
-                    }}
-                  />
-                  <div
-                    className="absolute rounded-full"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      background: `radial-gradient(circle at 40% 35%, ${palette.orb.inner} 0%, ${palette.orb.glow} 60%, transparent 90%)`,
-                      boxShadow: `0 0 20px ${palette.orb.glow}`,
-                    }}
-                  />
-                </div>
-
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3
-                      className="text-xl"
-                      style={{ color: palette.accent, fontWeight: 300 }}
-                    >
-                      {palette.name}
-                    </h3>
-                    {isSelected && (
-                      <motion.span
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="text-xs px-2 py-0.5 rounded-full"
-                        style={{
-                          background: `${palette.accent}20`,
-                          color: palette.accent,
-                        }}
-                      >
-                        已选择
-                      </motion.span>
-                    )}
-                  </div>
-                  <p
-                    className="text-sm"
-                    style={{ color: "rgba(255,255,255,0.35)" }}
-                  >
-                    {palette.subtitle}
-                  </p>
-                </div>
-
-                {/* Accent dot */}
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{
-                    background: palette.accent,
-                    boxShadow: `0 0 12px ${palette.accent}44`,
-                  }}
-                />
-              </div>
-            </motion.button>
-          );
-        })}
-      </div>
-
-      {/* ── Live preview ────────────────────────────────────────── */}
-      <AnimatePresence mode="wait">
-        {activePalette && (
-          <motion.div
-            key={activePalette.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.4 }}
-            className="max-w-3xl mx-auto mt-14"
-          >
-            <p
-              className="text-sm mb-5 text-center"
-              style={{ color: "rgba(255,255,255,0.3)" }}
-            >
-              预览 — {activePalette.name}
-            </p>
-
-            {/* Phase cards preview */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {activePalette.stops.map(([from, to], i) => {
-                const isDark = i < activePalette.darkTextFrom;
-                return (
-                  <div
-                    key={i}
-                    className="relative rounded-xl overflow-hidden p-5 min-h-[140px] flex flex-col justify-between"
-                    style={{
-                      background: `linear-gradient(135deg, ${from} 0%, ${to} 100%)`,
-                    }}
-                  >
-                    {/* Floating particle hint */}
-                    {[0, 1, 2].map((j) => (
-                      <div
-                        key={j}
-                        className="absolute rounded-full animate-float"
-                        style={{
-                          width: 3 + j,
-                          height: 3 + j,
-                          left: `${20 + j * 25}%`,
-                          top: `${20 + j * 20}%`,
-                          background: activePalette.particle,
-                          filter: "blur(1px)",
-                          animationDelay: `${j * 0.8}s`,
-                          animationDuration: `${4 + j}s`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Mini orb */}
-                    <div className="flex justify-center mb-3">
-                      <div
-                        className="w-10 h-10 rounded-full"
-                        style={{
-                          background: `radial-gradient(circle at 40% 35%, ${activePalette.orb.inner} 0%, ${activePalette.orb.glow} 50%, transparent 80%)`,
-                          boxShadow: `0 0 16px ${activePalette.orb.glow}`,
-                          filter: "blur(2px)",
-                        }}
-                      />
-                    </div>
-
-                    {/* Sample text */}
-                    <div className="relative z-10">
-                      <p
-                        className="text-base mb-1"
-                        style={{
-                          color: isDark
-                            ? "rgba(255,255,255,0.85)"
-                            : "rgba(42,21,53,0.85)",
-                          fontWeight: 300,
-                        }}
-                      >
-                        你还好吗
-                      </p>
-                      <p
-                        className="text-xs"
-                        style={{
-                          color: isDark
-                            ? "rgba(255,255,255,0.4)"
-                            : "rgba(42,21,53,0.4)",
-                        }}
-                      >
-                        {phaseLabels[i]}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Apply button ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {selected && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="fixed bottom-8 left-0 right-0 flex justify-center z-50"
-          >
-            <div
-              className="text-center px-8 py-3 rounded-full text-base"
-              style={{
-                background: palettes.find((p) => p.id === selected)!.accent,
-                color: "#1a1a1a",
-                fontWeight: 300,
-                boxShadow: `0 4px 30px ${palettes.find((p) => p.id === selected)!.accent}44`,
-              }}
-            >
-              已选择「{palettes.find((p) => p.id === selected)!.name}」— 告诉我来应用
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
-};
-
-export default Playground;
+}

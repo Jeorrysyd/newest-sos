@@ -8,7 +8,7 @@ interface AudioContextType {
   toggleMute: () => void;
   playBgm: () => void;
   stopBgm: () => void;
-  playNarration: (src: string) => void;
+  playNarration: (src: string, onEnd?: () => void) => void;
   stopNarration: () => void;
 }
 
@@ -30,12 +30,14 @@ interface AudioProviderProps {
 
 export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const narrationRef = useRef<HTMLAudioElement | null>(null);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
       const next = !prev;
+      isMutedRef.current = next;
       if (bgmRef.current) bgmRef.current.muted = next;
       if (narrationRef.current) narrationRef.current.muted = next;
       return next;
@@ -53,17 +55,37 @@ export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
     bgmRef.current.currentTime = 0;
   }, []);
 
-  const playNarration = useCallback((src: string) => {
+  const playNarration = useCallback((src: string, onEnd?: () => void) => {
     if (!narrationRef.current) return;
-    narrationRef.current.src = src;
-    narrationRef.current.muted = isMuted;
-    narrationRef.current.play().catch(() => {});
-  }, [isMuted]);
+    const el = narrationRef.current;
+    el.pause();
+
+    // Wrap onEnd so it fires at most once (guards against onended + onerror both firing)
+    let fired = false;
+    const safeEnd = onEnd ? () => { if (!fired) { fired = true; onEnd(); } } : undefined;
+
+    el.onended = safeEnd ?? null;
+    el.onerror = safeEnd ? () => setTimeout(safeEnd, 100) : null;
+    el.currentTime = 0;
+    el.src = src;
+    // Keep playing even when muted so timing still drives phase transitions
+    el.muted = isMutedRef.current;
+    el.play().catch(() => {
+      // Audio failed to load/play — still fire onEnd to keep phase moving
+      if (safeEnd) setTimeout(safeEnd, 100);
+    });
+  }, []);
 
   const stopNarration = useCallback(() => {
     if (!narrationRef.current) return;
+    narrationRef.current.onended = null;
     narrationRef.current.pause();
     narrationRef.current.currentTime = 0;
+  }, []);
+
+  // Set BGM to a soft background volume
+  useEffect(() => {
+    if (bgmRef.current) bgmRef.current.volume = 0.15;
   }, []);
 
   useEffect(() => {

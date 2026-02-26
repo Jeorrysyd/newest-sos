@@ -14,53 +14,54 @@ const SOSButton = ({ onClick, isActive = false, className }: SOSButtonProps) => 
       className={cn(
         "relative flex items-center justify-center",
         "w-48 h-48 rounded-full",
-        "text-2xl tracking-wider",
-        "transition-all duration-500 ease-out",
-        "hover:scale-105 active:scale-95",
+        "transition-transform duration-200 ease-out",
+        "hover:scale-[1.03] active:scale-95",
         "focus:outline-none",
-        isActive && "scale-95 opacity-80",
+        isActive && "scale-95",
         className
       )}
       style={{
-        background: `radial-gradient(circle at 40% 35%, ${twilight.palette.coral}, ${twilight.palette.plum})`,
-        boxShadow: `0 8px 32px rgba(106, 144, 152, 0.4)`,
-        fontFamily: twilight.font.family,
-        fontWeight: 300,
-        color: twilight.text.light,
+        background: "rgba(180, 130, 220, 0.06)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        border: "1px solid rgba(180, 130, 220, 0.45)",
+        boxShadow: `
+          0 0 60px rgba(180, 130, 220, 0.18),
+          0 0 120px rgba(100, 180, 220, 0.07),
+          inset 0 0 30px rgba(180, 130, 220, 0.04)
+        `,
       }}
     >
-      {/* Outer ring 2 - lightest */}
+      {/* Decorative ring 1 */}
       <span
-        className="absolute rounded-full"
+        className="absolute rounded-full pointer-events-none"
         style={{
-          width: '280px',
-          height: '280px',
-          opacity: 0.5,
-          background: `radial-gradient(circle, rgba(106, 144, 152, 0.2) 60%, transparent 70%)`,
+          width: 260,
+          height: 260,
+          border: "1px solid rgba(180, 130, 220, 0.18)",
+        }}
+      />
+      {/* Decorative ring 2 */}
+      <span
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          width: 320,
+          height: 320,
+          border: "1px solid rgba(180, 130, 220, 0.09)",
         }}
       />
 
-      {/* Outer ring 1 */}
+      {/* Label */}
       <span
-        className="absolute rounded-full"
+        className="relative z-10"
         style={{
-          width: '240px',
-          height: '240px',
-          opacity: 0.6,
-          background: `radial-gradient(circle, rgba(106, 144, 152, 0.3) 70%, transparent 85%)`,
+          color: "rgba(255, 255, 255, 0.85)",
+          fontSize: 16,
+          fontWeight: 300,
+          letterSpacing: "0.04em",
+          fontFamily: twilight.font.family,
         }}
-      />
-
-      {/* Main button circle */}
-      <span
-        className="absolute w-48 h-48 rounded-full"
-        style={{
-          background: `radial-gradient(circle at 40% 35%, ${twilight.palette.coral}, ${twilight.palette.plum})`,
-        }}
-      />
-
-      {/* Text */}
-      <span className="relative z-10" style={{ color: twilight.text.light }}>
+      >
         我需要帮助
       </span>
     </button>
