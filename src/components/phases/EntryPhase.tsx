@@ -1,28 +1,39 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { phaseText, twilight } from "@/lib/design-tokens";
 import SOSButton from "@/components/SOSButton";
-import { unlockSpeech } from "@/hooks/useNarration";
 import { useAudio } from "@/components/AudioManager";
+import type { SOSContext, SOSEvent } from "@/machines/sosMachine";
 
 interface EntryPhaseProps {
-  onEnter: () => void;
+  state: { context: SOSContext; value: unknown };
+  send: (event: SOSEvent) => void;
+  mode: "idle" | "entry";
   className?: string;
 }
 
-const EntryPhase = ({ onEnter, className }: EntryPhaseProps) => {
-  const [stage, setStage] = useState<"idle" | "holding" | "message">("idle");
+const EntryPhase = ({ send, mode, className }: EntryPhaseProps) => {
   const text = phaseText(0);
-  const { playBgm } = useAudio();
+  const { playBgm, unlockAudio } = useAudio();
+  const timerRef = useRef<number>();
 
   const handleClick = () => {
-    unlockSpeech(); // unlock iOS/Safari TTS while inside the user-gesture handler
-    playBgm();      // start BGM under the same user gesture to satisfy autoplay policy
-    setStage("holding");
-    setTimeout(() => setStage("message"), 1500);
-    setTimeout(() => onEnter(), 3000);
+    // Unlock audio on iOS Safari while inside the user-gesture handler
+    unlockAudio();
+    playBgm();
+    send({ type: "SOS_PRESSED" });
   };
+
+  // In entry mode, show "我接住你了" for 3s then advance
+  useEffect(() => {
+    if (mode === "entry") {
+      timerRef.current = window.setTimeout(() => {
+        send({ type: "ENTRY_MESSAGE_DONE" });
+      }, 3000);
+      return () => clearTimeout(timerRef.current);
+    }
+  }, [mode, send]);
 
   return (
     <div
@@ -32,7 +43,7 @@ const EntryPhase = ({ onEnter, className }: EntryPhaseProps) => {
       )}
     >
       <AnimatePresence mode="wait">
-        {stage === "idle" && (
+        {mode === "idle" && (
           <motion.div
             key="idle"
             className="flex flex-col items-center gap-10"
@@ -65,7 +76,7 @@ const EntryPhase = ({ onEnter, className }: EntryPhaseProps) => {
           </motion.div>
         )}
 
-        {(stage === "holding" || stage === "message") && (
+        {mode === "entry" && (
           <motion.p
             key="message"
             className="text-xl tracking-wide text-center"

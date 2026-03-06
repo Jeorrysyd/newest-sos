@@ -1,40 +1,51 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
-import { somaticPool, pickRandom } from "@/lib/content-library";
+import type { SOSContext, SOSEvent } from "@/machines/sosMachine";
 
 interface SomaticPhaseProps {
-  onComplete: () => void;
+  state: { context: SOSContext; value: unknown };
+  send: (event: SOSEvent) => void;
   className?: string;
 }
 
-const SomaticPhase = ({ onComplete, className }: SomaticPhaseProps) => {
-  const intervention = useMemo(() => pickRandom(somaticPool, 1)[0], []);
-  const [stepIndex, setStepIndex] = useState<number>(-1); // -1 = title screen
+const SomaticPhase = ({ state, send, className }: SomaticPhaseProps) => {
+  const { stepIndex, somaticIntervention } = state.context;
+  const subState = (state.value as Record<string, string>)?.somatic;
   const text = phaseText(4);
+  const timerRef = useRef<number>();
 
-  // Show title for 3s, then walk through each step
+  // Send ANIMATION_DONE when entering animation completes
+  const handleAnimationComplete = (definition: string) => {
+    if (definition !== "animate") return;
+    if (subState === "entering") {
+      send({ type: "ANIMATION_DONE" });
+    }
+  };
+
+  // Title screen: 3s timer
   useEffect(() => {
-    const titleTimer = setTimeout(() => setStepIndex(0), 3000);
-    return () => clearTimeout(titleTimer);
-  }, []);
+    if (subState === "title") {
+      timerRef.current = window.setTimeout(() => {
+        send({ type: "TIMER_DONE" });
+      }, 3000);
+      return () => clearTimeout(timerRef.current);
+    }
+  }, [subState]);
 
+  // Active steps: use duration from intervention
   useEffect(() => {
-    if (stepIndex < 0) return;
-    const duration = intervention.durations[stepIndex];
-    const next = stepIndex + 1;
+    if (subState === "active" && somaticIntervention) {
+      const duration = somaticIntervention.durations[stepIndex];
+      timerRef.current = window.setTimeout(() => {
+        send({ type: "TIMER_DONE" });
+      }, duration);
+      return () => clearTimeout(timerRef.current);
+    }
+  }, [subState, stepIndex]);
 
-    const timer = setTimeout(() => {
-      if (next < intervention.steps.length) {
-        setStepIndex(next);
-      } else {
-        onComplete();
-      }
-    }, duration);
-
-    return () => clearTimeout(timer);
-  }, [stepIndex, intervention, onComplete]);
+  if (!somaticIntervention) return null;
 
   return (
     <div
@@ -82,8 +93,7 @@ const SomaticPhase = ({ onComplete, className }: SomaticPhaseProps) => {
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center px-8 text-center">
         <AnimatePresence mode="wait">
-          {stepIndex === -1 ? (
-            // Title screen
+          {(subState === "entering" || subState === "title") ? (
             <motion.h2
               key="title"
               className="text-2xl leading-relaxed"
@@ -92,38 +102,48 @@ const SomaticPhase = ({ onComplete, className }: SomaticPhaseProps) => {
                 fontFamily: twilight.font.family,
                 fontWeight: 300,
               }}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              variants={{
+                initial: { opacity: 0, y: 12 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0, y: -8 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.9, ease: "easeOut" }}
+              onAnimationComplete={handleAnimationComplete}
             >
-              {intervention.title}
+              {somaticIntervention.title}
             </motion.h2>
-          ) : (
-            // Step text
+          ) : subState === "active" ? (
             <motion.p
-              key={stepIndex}
+              key={`step-${stepIndex}`}
               className="text-xl leading-relaxed whitespace-pre-line"
               style={{
                 color: text.soft,
                 fontFamily: twilight.font.family,
                 fontWeight: twilight.font.weight,
               }}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              variants={{
+                initial: { opacity: 0, y: 12 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0, y: -8 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8, ease: "easeOut" }}
             >
-              {intervention.steps[stepIndex]}
+              {somaticIntervention.steps[stepIndex]}
             </motion.p>
-          )}
+          ) : null}
         </AnimatePresence>
       </div>
 
       {/* Step progress dots */}
-      {stepIndex >= 0 && (
+      {subState === "active" && (
         <div className="absolute bottom-20 flex items-center gap-2">
-          {intervention.steps.map((_, i) => (
+          {somaticIntervention.steps.map((_, i) => (
             <div
               key={i}
               className="h-1 rounded-full transition-all duration-500"

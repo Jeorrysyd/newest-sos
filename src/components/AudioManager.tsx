@@ -10,6 +10,7 @@ interface AudioContextType {
   stopBgm: () => void;
   playNarration: (src: string, onEnd?: () => void) => void;
   stopNarration: () => void;
+  unlockAudio: () => void;
 }
 
 const AudioCtx = createContext<AudioContextType>({
@@ -19,6 +20,7 @@ const AudioCtx = createContext<AudioContextType>({
   stopBgm: () => {},
   playNarration: () => {},
   stopNarration: () => {},
+  unlockAudio: () => {},
 });
 
 export const useAudio = () => useContext(AudioCtx);
@@ -33,6 +35,10 @@ export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
   const isMutedRef = useRef(false);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const narrationRef = useRef<HTMLAudioElement | null>(null);
+  // Generation counter — invalidates stale callbacks from previous calls
+  const genRef = useRef(0);
+  // RAF handle — debounces rapid duplicate calls into one
+  const rafRef = useRef<number>(0);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -58,29 +64,72 @@ export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
   const playNarration = useCallback((src: string, onEnd?: () => void) => {
     if (!narrationRef.current) return;
     const el = narrationRef.current;
+    const gen = ++genRef.current;
+
+    console.log(`[audio] playNarration called: ${src.split('/').pop()} gen=${gen}`);
+
+    // Cancel any pending RAF from a previous rapid call
+    cancelAnimationFrame(rafRef.current);
+
+    // Pause immediately so old audio stops
     el.pause();
+    el.onended = null;
+    el.onerror = null;
 
-    // Wrap onEnd so it fires at most once (guards against onended + onerror both firing)
-    let fired = false;
-    const safeEnd = onEnd ? () => { if (!fired) { fired = true; onEnd(); } } : undefined;
+    // Defer play to next frame — avoids "interrupted by pause()" when called twice rapidly
+    rafRef.current = requestAnimationFrame(() => {
+      // If a newer call arrived since we were scheduled, bail out
+      if (gen !== genRef.current) {
+        console.log(`[audio] skipping stale gen=${gen} (current=${genRef.current})`);
+        return;
+      }
 
-    el.onended = safeEnd ?? null;
-    el.onerror = safeEnd ? () => setTimeout(safeEnd, 100) : null;
-    el.currentTime = 0;
-    el.src = src;
-    // Keep playing even when muted so timing still drives phase transitions
-    el.muted = isMutedRef.current;
-    el.play().catch(() => {
-      // Audio failed to load/play — still fire onEnd to keep phase moving
-      if (safeEnd) setTimeout(safeEnd, 100);
+      let fired = false;
+      const safeEnd = onEnd ? () => {
+        if (!fired && gen === genRef.current) {
+          fired = true;
+          console.log(`[audio] safeEnd: ${src.split('/').pop()} gen=${gen} (time=${el.currentTime.toFixed(1)}/${el.duration?.toFixed(1)})`);
+          onEnd();
+        }
+      } : undefined;
+
+      el.onended = safeEnd ?? null;
+      el.onerror = safeEnd ? () => {
+        console.log(`[audio] onerror: ${src.split('/').pop()} gen=${gen} error=${el.error?.code}`);
+        setTimeout(safeEnd, 2000);
+      } : null;
+      el.currentTime = 0;
+      el.src = src;
+      el.muted = isMutedRef.current;
+      el.play().catch(() => {
+        console.log(`[audio] play() failed: ${src.split('/').pop()} gen=${gen}`);
+        if (gen === genRef.current && safeEnd) setTimeout(safeEnd, 2000);
+      });
     });
   }, []);
 
   const stopNarration = useCallback(() => {
     if (!narrationRef.current) return;
+    ++genRef.current; // Invalidate any pending callbacks
+    cancelAnimationFrame(rafRef.current);
     narrationRef.current.onended = null;
     narrationRef.current.pause();
     narrationRef.current.currentTime = 0;
+  }, []);
+
+  // Unlock audio on iOS Safari — must be called inside a user gesture handler
+  const unlockAudio = useCallback(() => {
+    const el = narrationRef.current;
+    if (el) {
+      // Play a tiny silent WAV to "unlock" the audio element
+      const prevSrc = el.src;
+      el.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+      el.play().then(() => {
+        el.pause();
+        el.currentTime = 0;
+        if (prevSrc) el.src = prevSrc;
+      }).catch(() => {});
+    }
   }, []);
 
   // Set BGM to a soft background volume
@@ -96,7 +145,7 @@ export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
   }, []);
 
   return (
-    <AudioCtx.Provider value={{ isMuted, toggleMute, playBgm, stopBgm, playNarration, stopNarration }}>
+    <AudioCtx.Provider value={{ isMuted, toggleMute, playBgm, stopBgm, playNarration, stopNarration, unlockAudio }}>
       {bgmSrc && (
         <audio ref={bgmRef} src={bgmSrc} loop preload="auto" muted={isMuted} />
       )}

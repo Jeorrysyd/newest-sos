@@ -1,70 +1,81 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
+import { useAudio } from "@/components/AudioManager";
+import { AUDIO_MAP, BREATH_CONFIG } from "@/machines/sosMachine";
+import type { SOSContext, SOSEvent } from "@/machines/sosMachine";
 
 interface StabilizePhaseProps {
-  onComplete: () => void;
-
+  state: { context: SOSContext; value: unknown };
+  send: (event: SOSEvent) => void;
   className?: string;
 }
 
-type BreathStep = "inhale" | "hold" | "exhale";
-
-const breathingSteps: { step: BreathStep; label: string; duration: number }[] = [
+const breathingSteps: { step: 'inhale' | 'hold' | 'exhale'; label: string; duration: number }[] = [
   { step: "inhale", label: "吸气",   duration: 4000 },
   { step: "hold",   label: "屏住呼吸", duration: 4000 },
   { step: "exhale", label: "呼气",   duration: 6000 },
 ];
 
-const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
-  const [started, setStarted] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [cycles, setCycles] = useState(0);
-  const [isActive, setIsActive] = useState(true);
-  const [done, setDone] = useState(false);
-  const totalCycles = 3;
+const StabilizePhase = ({ state, send, className }: StabilizePhaseProps) => {
+  const { playNarration } = useAudio();
+  const subState = (state.value as Record<string, string>)?.stabilize;
+  const { breathStep, breathRound } = state.context;
   const text = phaseText(3);
+  const totalCycles = BREATH_CONFIG.totalRounds;
+  const breathTimerRef = useRef<number>();
 
-  const currentStep = breathingSteps[currentStepIndex];
-
-  // Show intro text for 3s, then start breathing
-  useEffect(() => {
-    const timer = setTimeout(() => setStarted(true), 3000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const advanceStep = useCallback(() => {
-    if (!isActive) return;
-    const nextIndex = (currentStepIndex + 1) % breathingSteps.length;
-    if (nextIndex === 0) {
-      const newCycles = cycles + 1;
-      setCycles(newCycles);
-      if (newCycles >= totalCycles) {
-        setIsActive(false);
-        setDone(true);
-        return;
-      }
+  // Entering: send ANIMATION_DONE after intro text animates in
+  const handleIntroAnimationComplete = (definition: string) => {
+    if (definition !== "animate") return;
+    if (subState === "entering") {
+      send({ type: "ANIMATION_DONE" });
     }
-    setCurrentStepIndex(nextIndex);
-  }, [currentStepIndex, cycles, isActive]);
+  };
 
-  // Breathing loop — fixed physiological durations
+  // Intro: play "现在，来跟我一起呼吸"
   useEffect(() => {
-    if (!started || !isActive) return;
-    const timer = setTimeout(advanceStep, currentStep.duration);
-    return () => clearTimeout(timer);
-  }, [started, currentStepIndex, isActive, advanceStep, currentStep.duration]);
+    if (subState === "intro") {
+      playNarration(AUDIO_MAP.stabilize.intro, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState]);
 
-  // Show bridge text for 4s after breathing done, then advance
+  // Breathing: fire-and-forget audio + precise timer
   useEffect(() => {
-    if (!done) return;
-    const timer = setTimeout(onComplete, 4000);
-    return () => clearTimeout(timer);
-  }, [done, onComplete]);
+    if (subState !== "breathing") return;
+
+    const config = BREATH_CONFIG[breathStep];
+    const audioSrc = AUDIO_MAP.stabilize[breathStep];
+
+    // Fire-and-forget audio
+    playNarration(audioSrc);
+
+    // Timer drives rhythm
+    breathTimerRef.current = window.setTimeout(() => {
+      send({ type: "BREATH_TICK" });
+    }, config.durationMs);
+
+    return () => clearTimeout(breathTimerRef.current);
+  }, [subState, breathStep, breathRound]);
+
+  // Outro: play done audio after text animates in
+  const handleOutroAnimationComplete = (definition: string) => {
+    if (definition !== "animate") return;
+    if (subState === "outro") {
+      playNarration(AUDIO_MAP.stabilize.done, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  };
+
+  // Compute which step index we're on (for progress UI)
+  const currentStepIndex = breathingSteps.findIndex(s => s.step === breathStep);
 
   const getCircleScale = () => {
-    switch (currentStep.step) {
+    switch (breathStep) {
       case "inhale": return 1.2;
       case "hold":   return 1.2;
       case "exhale": return 1;
@@ -74,19 +85,17 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
 
   return (
     <div className={cn("relative min-h-[100dvh] flex flex-col items-center justify-center", className)}>
-      {/* Background layer — fades in when breathing starts */}
+      {/* Background layer */}
       <div
         className="absolute inset-0 transition-opacity duration-[1500ms] ease-in-out"
-        style={{
-          background: phaseGradient(3),
-        }}
+        style={{ background: phaseGradient(3) }}
       />
 
       {/* Content layer */}
       <div className="relative z-10 flex flex-col items-center justify-center w-full min-h-[100dvh]">
         <AnimatePresence mode="wait">
-          {/* Intro bridge text */}
-          {!started && (
+          {/* Intro / entering text */}
+          {(subState === "entering" || subState === "intro") && (
             <motion.p
               key="intro"
               className="text-xl text-center"
@@ -95,17 +104,23 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
                 fontFamily: twilight.font.family,
                 fontWeight: twilight.font.weight,
               }}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
+              variants={{
+                initial: { opacity: 0, y: 8 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8, ease: "easeOut" }}
+              onAnimationComplete={handleIntroAnimationComplete}
             >
               现在，来跟我一起呼吸
             </motion.p>
           )}
 
-          {/* Bridge after breathing */}
-          {done && (
+          {/* Outro text */}
+          {subState === "outro" && (
             <motion.p
               key="done"
               className="text-xl text-center leading-relaxed px-10"
@@ -114,9 +129,14 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
                 fontFamily: twilight.font.family,
                 fontWeight: twilight.font.weight,
               }}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
+              variants={{
+                initial: { opacity: 0, y: 8 },
+                animate: { opacity: 1, y: 0 },
+              }}
+              initial="initial"
+              animate="animate"
               transition={{ duration: 0.8, ease: "easeOut" }}
+              onAnimationComplete={handleOutroAnimationComplete}
             >
               呼吸，帮了你
               <br />
@@ -127,7 +147,7 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
           )}
 
           {/* Breathing UI */}
-          {started && !done && (
+          {subState === "breathing" && (
             <motion.div
               key="breathing"
               className="flex flex-col items-center w-full"
@@ -208,7 +228,7 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
                   }}
                   animate={{ scale: getCircleScale() }}
                   transition={{
-                    duration: currentStep.step === "exhale" ? 6 : 4,
+                    duration: breathStep === "exhale" ? 6 : 4,
                     ease: "easeInOut",
                   }}
                 />
@@ -219,7 +239,7 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
                 {Array.from({ length: totalCycles }).map((_, i) => (
                   <div key={i} className="flex items-center gap-1">
                     <div className="relative flex items-center justify-center transition-all duration-500">
-                      {i < cycles ? (
+                      {i < breathRound ? (
                         <div
                           className="w-6 h-6 rounded-full flex items-center justify-center"
                           style={{
@@ -231,7 +251,7 @@ const StabilizePhase = ({ onComplete, className }: StabilizePhaseProps) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         </div>
-                      ) : i === cycles ? (
+                      ) : i === breathRound ? (
                         <div
                           className="w-16 h-1 rounded-full overflow-hidden"
                           style={{ background: 'rgba(255, 255, 255, 0.15)' }}

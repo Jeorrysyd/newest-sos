@@ -1,42 +1,60 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
-import { cognitivePool, pickRandom } from "@/lib/content-library";
+import { useAudio } from "@/components/AudioManager";
+import { AUDIO_MAP } from "@/machines/sosMachine";
+import type { SOSContext, SOSEvent } from "@/machines/sosMachine";
 
 interface CognitivePhaseProps {
-  onComplete: () => void;
-
+  state: { context: SOSContext; value: unknown };
+  send: (event: SOSEvent) => void;
   className?: string;
 }
 
-const CARDS_PER_SESSION = 3;
-const CARD_DURATION = 5000;
-const BRIDGE_DURATION = 4000;
-
-const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
-  const cards = useMemo(() => pickRandom(cognitivePool, CARDS_PER_SESSION), []);
-  const [currentCard, setCurrentCard] = useState(0);
-  const [bridging, setBridging] = useState(false);
+const CognitivePhase = ({ state, send, className }: CognitivePhaseProps) => {
+  const { playNarration } = useAudio();
+  const { stepIndex, cognitiveCards, cognitiveBridging } = state.context;
+  const subState = (state.value as Record<string, string>)?.cognitive;
+  const gapTimerRef = useRef<number>();
   const text = phaseText(4);
+  const currentCard = cognitiveCards[stepIndex];
 
-  // Show each card for 5s, then next card or bridge
+  // Play card audio when entering "playing" sub-state
   useEffect(() => {
-    if (bridging) return;
-    const isLast = currentCard === cards.length - 1;
-    const timer = setTimeout(
-      isLast ? () => setBridging(true) : () => setCurrentCard(prev => prev + 1),
-      CARD_DURATION
-    );
-    return () => clearTimeout(timer);
-  }, [currentCard, bridging, cards.length]);
+    if (subState === "playing" && currentCard) {
+      playNarration(currentCard.audio, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState, stepIndex]);
 
-  // Show bridge for 4s, then advance phase
+  // Play bridge audio when entering "bridgePlaying" sub-state
   useEffect(() => {
-    if (!bridging) return;
-    const timer = setTimeout(onComplete, BRIDGE_DURATION);
-    return () => clearTimeout(timer);
-  }, [bridging, onComplete]);
+    if (subState === "bridgePlaying") {
+      playNarration(AUDIO_MAP.cognitiveBridge, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState]);
+
+  // Gap timer: 1500ms
+  useEffect(() => {
+    if (subState === "gap" || subState === "bridgeGap") {
+      gapTimerRef.current = window.setTimeout(() => {
+        send({ type: "GAP_ELAPSED" });
+      }, 1500);
+      return () => clearTimeout(gapTimerRef.current);
+    }
+  }, [subState, stepIndex]);
+
+  // Animation complete for entering/nextCard/bridge sub-states
+  const handleAnimationComplete = (definition: string) => {
+    if (definition !== "animate") return;
+    if (subState === "entering" || subState === "nextCard" || subState === "bridge") {
+      send({ type: "ANIMATION_DONE" });
+    }
+  };
 
   return (
     <div
@@ -67,25 +85,27 @@ const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
       </div>
 
       {/* Header */}
-      <div className="absolute top-20 text-center px-8">
-        <p
-          className="text-sm leading-relaxed"
-          style={{
-            color: text.muted,
-            fontFamily: twilight.font.family,
-            fontWeight: twilight.font.weight,
-          }}
-        >
-          这些话会一直陪着你
-          <br />
-          任何时候需要温暖
-          <br />
-          都可以回来看看
-        </p>
-      </div>
+      {!cognitiveBridging && (
+        <div className="absolute top-20 text-center px-8">
+          <p
+            className="text-sm leading-relaxed"
+            style={{
+              color: text.muted,
+              fontFamily: twilight.font.family,
+              fontWeight: twilight.font.weight,
+            }}
+          >
+            这些话会一直陪着你
+            <br />
+            任何时候需要温暖
+            <br />
+            都可以回来看看
+          </p>
+        </div>
+      )}
 
-      {/* Bridge screen after cards */}
-      {bridging && (
+      {/* Bridge screen */}
+      {cognitiveBridging && (
         <motion.p
           key="bridge"
           className="text-xl text-center leading-relaxed px-10 whitespace-pre-line"
@@ -94,24 +114,35 @@ const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
             fontFamily: twilight.font.family,
             fontWeight: twilight.font.weight,
           }}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+          variants={{
+            initial: { opacity: 0, y: 8 },
+            animate: { opacity: 1, y: 0 },
+          }}
+          initial="initial"
+          animate="animate"
           transition={{ duration: 0.8, ease: "easeOut" }}
+          onAnimationComplete={handleAnimationComplete}
         >
           {"这些话，会一直在这里\n\n现在，让我们做一件小事\n帮你的身体也回到当下"}
         </motion.p>
       )}
 
       {/* Card */}
-      {!bridging && (
+      {!cognitiveBridging && currentCard && (
         <div className="relative w-full max-w-sm">
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentCard}
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
+              key={stepIndex}
+              variants={{
+                initial: { opacity: 0, x: 40 },
+                animate: { opacity: 1, x: 0 },
+                exit: { opacity: 0, x: -40 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.5, ease: "easeInOut" }}
+              onAnimationComplete={handleAnimationComplete}
               className="text-center"
             >
               <h2
@@ -122,7 +153,7 @@ const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
                   fontWeight: 300,
                 }}
               >
-                {cards[currentCard].title}
+                {currentCard.title}
               </h2>
 
               <p
@@ -133,7 +164,7 @@ const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
                   fontWeight: twilight.font.weight,
                 }}
               >
-                {cards[currentCard].description}
+                {currentCard.description}
               </p>
             </motion.div>
           </AnimatePresence>
@@ -141,15 +172,15 @@ const CognitivePhase = ({ onComplete, className }: CognitivePhaseProps) => {
       )}
 
       {/* Progress dots */}
-      {!bridging && (
+      {!cognitiveBridging && (
         <div className="absolute bottom-24 flex items-center gap-2">
-          {cards.map((_, i) => (
+          {cognitiveCards.map((_, i) => (
             <div
               key={i}
               className="h-1.5 rounded-full transition-all duration-500"
               style={{
-                width: i === currentCard ? 20 : 6,
-                background: i === currentCard
+                width: i === stepIndex ? 20 : 6,
+                background: i === stepIndex
                   ? text.primary
                   : `${text.primary}33`,
               }}

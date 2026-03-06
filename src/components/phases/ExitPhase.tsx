@@ -1,58 +1,82 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { phaseGradient, phaseText, twilight } from "@/lib/design-tokens";
+import { useAudio } from "@/components/AudioManager";
+import { AUDIO_MAP, EXIT_AFFIRMATIONS } from "@/machines/sosMachine";
+import type { SOSContext, SOSEvent } from "@/machines/sosMachine";
 
 interface ExitPhaseProps {
-  onRestart: () => void;
-
+  state: { context: SOSContext; value: unknown };
+  send: (event: SOSEvent) => void;
   className?: string;
 }
 
-type ExitStage = "intro" | "butterfly_prep" | "butterfly" | "affirm" | "farewell";
-
-const affirmations = [
-  { text: "我很安全" },
-  { text: "我是被爱的" },
-  { text: "我已经做得很好了" },
-];
-
-const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
-  const [stage, setStage] = useState<ExitStage>("intro");
-  const [affirmIndex, setAffirmIndex] = useState(0);
+const ExitPhase = ({ state, send, className }: ExitPhaseProps) => {
+  const { playNarration } = useAudio();
+  const { affirmIndex } = state.context;
+  const subState = (state.value as Record<string, string>)?.exit;
+  const gapTimerRef = useRef<number>();
   const text = phaseText(5);
 
-  // intro → butterfly_prep (4s)
+  // Play audio for intro stage (after entering animation)
   useEffect(() => {
-    if (stage !== "intro") return;
-    const timer = setTimeout(() => setStage("butterfly_prep"), 4000);
-    return () => clearTimeout(timer);
-  }, [stage]);
+    if (subState === "intro") {
+      playNarration(AUDIO_MAP.exit.intro, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState]);
 
-  // butterfly_prep → butterfly (5s)
+  // Play audio for butterflyPrepPlaying
   useEffect(() => {
-    if (stage !== "butterfly_prep") return;
-    const timer = setTimeout(() => setStage("butterfly"), 5000);
-    return () => clearTimeout(timer);
-  }, [stage]);
+    if (subState === "butterflyPrepPlaying") {
+      playNarration(AUDIO_MAP.exit.butterflyPrep, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState]);
 
-  // butterfly → affirm (6s)
+  // Play audio for butterflyPlaying
   useEffect(() => {
-    if (stage !== "butterfly") return;
-    const timer = setTimeout(() => setStage("affirm"), 6000);
-    return () => clearTimeout(timer);
-  }, [stage]);
+    if (subState === "butterflyPlaying") {
+      playNarration(AUDIO_MAP.exit.butterfly, () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState]);
 
-  // affirm — show each affirmation for 3s, then next or farewell
+  // Play audio for affirmPlaying
   useEffect(() => {
-    if (stage !== "affirm") return;
-    const isLast = affirmIndex === affirmations.length - 1;
-    const timer = setTimeout(
-      isLast ? () => setStage("farewell") : () => setAffirmIndex(prev => prev + 1),
-      3000
-    );
-    return () => clearTimeout(timer);
-  }, [stage, affirmIndex]);
+    if (subState === "affirmPlaying") {
+      playNarration(AUDIO_MAP.exit.affirm[affirmIndex], () => {
+        send({ type: "AUDIO_ENDED" });
+      });
+    }
+  }, [subState, affirmIndex]);
+
+  // Gap timer for affirmGap: 2000ms
+  useEffect(() => {
+    if (subState === "affirmGap") {
+      gapTimerRef.current = window.setTimeout(() => {
+        send({ type: "GAP_ELAPSED" });
+      }, 2000);
+      return () => clearTimeout(gapTimerRef.current);
+    }
+  }, [subState, affirmIndex]);
+
+  // Animation complete handler
+  const handleAnimationComplete = (definition: string) => {
+    if (definition !== "animate") return;
+    if (
+      subState === "entering" ||
+      subState === "butterflyPrep" ||
+      subState === "butterfly" ||
+      subState === "affirm"
+    ) {
+      send({ type: "ANIMATION_DONE" });
+    }
+  };
 
   return (
     <div
@@ -119,16 +143,22 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
       <div className="relative z-10 flex flex-col items-center justify-center">
         <AnimatePresence mode="wait">
 
-          {/* Stage 0: Bridge intro */}
-          {stage === "intro" && (
+          {/* Entering + intro: bridge text */}
+          {(subState === "entering" || subState === "intro") && (
             <motion.p
               key="intro"
               className="text-xl text-center leading-relaxed"
               style={{ color: text.soft, fontFamily: twilight.font.family, fontWeight: twilight.font.weight }}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
+              variants={{
+                initial: { opacity: 0, y: 8 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8, ease: "easeOut" }}
+              onAnimationComplete={handleAnimationComplete}
             >
               很好
               <br />
@@ -138,15 +168,21 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
             </motion.p>
           )}
 
-          {/* Stage 1: Butterfly prep — get into position */}
-          {stage === "butterfly_prep" && (
+          {/* Butterfly prep */}
+          {(subState === "butterflyPrep" || subState === "butterflyPrepPlaying") && (
             <motion.div
               key="butterfly_prep"
               className="flex flex-col items-center text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              variants={{
+                initial: { opacity: 0, y: 10 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0, y: -10 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8 }}
+              onAnimationComplete={handleAnimationComplete}
             >
               <h2
                 className="text-xl mb-8"
@@ -165,15 +201,21 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
             </motion.div>
           )}
 
-          {/* Stage 2: Butterfly — in motion */}
-          {stage === "butterfly" && (
+          {/* Butterfly in motion */}
+          {(subState === "butterfly" || subState === "butterflyPlaying") && (
             <motion.div
               key="butterfly"
               className="flex flex-col items-center text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              variants={{
+                initial: { opacity: 0, y: 10 },
+                animate: { opacity: 1, y: 0 },
+                exit: { opacity: 0, y: -10 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8 }}
+              onAnimationComplete={handleAnimationComplete}
             >
               <p
                 className="text-base leading-loose mb-6"
@@ -208,15 +250,21 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
             </motion.div>
           )}
 
-          {/* Stage 3: Affirmations — say-along */}
-          {stage === "affirm" && (
+          {/* Affirmations */}
+          {(subState === "affirm" || subState === "affirmPlaying" || subState === "affirmGap") && (
             <motion.div
               key={`affirm-${affirmIndex}`}
               className="flex flex-col items-center text-center gap-5"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
+              variants={{
+                initial: { opacity: 0, scale: 0.95 },
+                animate: { opacity: 1, scale: 1 },
+                exit: { opacity: 0, scale: 1.05 },
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               transition={{ duration: 0.8 }}
+              onAnimationComplete={handleAnimationComplete}
             >
               <p
                 className="text-sm tracking-widest"
@@ -228,18 +276,22 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
                 className="text-2xl leading-relaxed"
                 style={{ color: text.primary, fontFamily: twilight.font.family, fontWeight: 300 }}
               >
-                {affirmations[affirmIndex].text}
+                {EXIT_AFFIRMATIONS[affirmIndex]}
               </p>
             </motion.div>
           )}
 
-          {/* Stage 4: Farewell + exit */}
-          {stage === "farewell" && (
+          {/* Farewell */}
+          {subState === "farewell" && (
             <motion.div
               key="farewell"
               className="flex flex-col items-center text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+              variants={{
+                initial: { opacity: 0, y: 10 },
+                animate: { opacity: 1, y: 0 },
+              }}
+              initial="initial"
+              animate="animate"
               transition={{ duration: 0.8 }}
             >
               <p
@@ -252,7 +304,7 @@ const ExitPhase = ({ onRestart, className }: ExitPhaseProps) => {
               </p>
 
               <motion.button
-                onClick={onRestart}
+                onClick={() => send({ type: "RESTART" })}
                 className={cn(
                   "px-12 py-3.5 rounded-lg",
                   "text-lg",

@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
+import { useMachine } from "@xstate/react";
 import { motion, AnimatePresence } from "framer-motion";
+import { sosMachine } from "@/machines/sosMachine";
 import EntryPhase from "@/components/phases/EntryPhase";
 import ComfortPhase from "@/components/phases/ComfortPhase";
 import StabilizePhase from "@/components/phases/StabilizePhase";
@@ -11,37 +12,35 @@ import PhoneFrame from "@/components/PhoneFrame";
 import { AudioProvider, MuteButton } from "@/components/AudioManager";
 import { phaseGradient } from "@/lib/design-tokens";
 
-type Phase = "entry" | "comfort" | "stabilize" | "cognitive" | "somatic" | "exit";
-
-// 单次淡出/淡入时长 — 顺序切换，任何时刻只有一个 phase 可见
 const FADE_DURATION = 0.5;
 
+/** Extract top-level phase name from XState nested state value */
+function getPhase(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null) return Object.keys(value)[0];
+  return "idle";
+}
+
 const Index = () => {
-  const [activePhase, setActivePhase] = useState<Phase>("entry");
-  const isTransitioningRef = useRef(false);
+  const [state, send] = useMachine(sosMachine);
+  const phase = getPhase(state.value);
 
-  const transitionTo = useCallback((phase: Phase) => {
-    if (isTransitioningRef.current) return;
-    isTransitioningRef.current = true;
-    setActivePhase(phase);
-  }, []);
-
-  const handleRestart = useCallback(() => transitionTo("entry"), [transitionTo]);
-
-  const renderPhase = (phase: Phase) => {
+  const renderPhase = () => {
     switch (phase) {
+      case "idle":
+        return <EntryPhase state={state} send={send} mode="idle" />;
       case "entry":
-        return <EntryPhase onEnter={() => transitionTo("comfort")} />;
+        return <EntryPhase state={state} send={send} mode="entry" />;
       case "comfort":
-        return <ComfortPhase onComplete={() => transitionTo("stabilize")} />;
+        return <ComfortPhase state={state} send={send} />;
       case "stabilize":
-        return <StabilizePhase onComplete={() => transitionTo("cognitive")} />;
+        return <StabilizePhase state={state} send={send} />;
       case "cognitive":
-        return <CognitivePhase onComplete={() => transitionTo("somatic")} />;
+        return <CognitivePhase state={state} send={send} />;
       case "somatic":
-        return <SomaticPhase onComplete={() => transitionTo("exit")} />;
+        return <SomaticPhase state={state} send={send} />;
       case "exit":
-        return <ExitPhase onRestart={handleRestart} />;
+        return <ExitPhase state={state} send={send} />;
       default:
         return null;
     }
@@ -54,25 +53,14 @@ const Index = () => {
     >
       <AnimatePresence mode="wait">
         <motion.div
-          key={activePhase}
+          key={phase}
           className="absolute inset-0"
-          variants={{
-            initial: { opacity: 0 },
-            animate: { opacity: 1 },
-            exit:    { opacity: 0 },
-          }}
-          initial="initial"
-          animate="animate"
-          exit="exit"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: FADE_DURATION, ease: "easeInOut" }}
-          onAnimationComplete={(definition) => {
-            // "animate" fires when the ENTER animation finishes (named variant)
-            if (definition === "animate") {
-              isTransitioningRef.current = false;
-            }
-          }}
         >
-          {renderPhase(activePhase)}
+          {renderPhase()}
         </motion.div>
       </AnimatePresence>
 
