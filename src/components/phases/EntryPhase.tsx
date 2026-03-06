@@ -46,11 +46,11 @@ const EntryPhase = ({ send, mode, className }: EntryPhaseProps) => {
         {mode === "idle" && (
           <motion.div
             key="idle"
-            className="flex flex-col items-center gap-10"
+            className="flex flex-col items-center min-h-[100dvh]"
             exit={{ opacity: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 mt-[25vh]">
               <h1
                 className="text-2xl"
                 style={{
@@ -72,7 +72,9 @@ const EntryPhase = ({ send, mode, className }: EntryPhaseProps) => {
                 如果你需要，我在这里
               </p>
             </div>
-            <SOSButton onClick={handleClick} />
+            <div className="flex-1 flex items-center justify-center">
+              <SOSButton onClick={handleClick} />
+            </div>
           </motion.div>
         )}
 

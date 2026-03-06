@@ -13,7 +13,7 @@ const SOSButton = ({ onClick, isActive = false, className }: SOSButtonProps) => 
       onClick={onClick}
       className={cn(
         "relative flex items-center justify-center",
-        "w-48 h-48 rounded-full",
+        "w-56 h-56 rounded-full",
         "transition-transform duration-200 ease-out",
         "hover:scale-[1.03] active:scale-95",
         "focus:outline-none",
@@ -62,7 +62,7 @@ const SOSButton = ({ onClick, isActive = false, className }: SOSButtonProps) => 
           fontFamily: twilight.font.family,
         }}
       >
-        我需要帮助
+        我是安全的
       </span>
     </button>
   );
