@@ -72,7 +72,7 @@ const EntryPhase = ({ send, mode, className }: EntryPhaseProps) => {
                 如果你需要，我在这里
               </p>
             </div>
-            <div className="flex-1 flex items-center justify-center">
+            <div className="mt-[8vh] flex items-center justify-center">
               <SOSButton onClick={handleClick} />
             </div>
           </motion.div>

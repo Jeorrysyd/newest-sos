@@ -101,6 +101,7 @@ export const AudioProvider = ({ children, bgmSrc }: AudioProviderProps) => {
       el.currentTime = 0;
       el.src = src;
       el.muted = isMutedRef.current;
+      el.volume = 0.5;
       el.play().catch(() => {
         console.log(`[audio] play() failed: ${src.split('/').pop()} gen=${gen}`);
         if (gen === genRef.current && safeEnd) setTimeout(safeEnd, 2000);
